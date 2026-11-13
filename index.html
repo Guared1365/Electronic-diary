@@ -637,41 +637,69 @@ const WEEKDAY_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
 // ============================================================
 // ОПРЕДЕЛЕНИЕ НЕДЕЛИ (числитель/знаменатель)
-// Якорная логика: от понедельника-якоря считаем чётность недель.
-// По умолчанию: текущая неделя = знаменатель, следующая = числитель.
+// Всё работаем с локальными датами YYYY-MM-DD.
 // ============================================================
-function getMondayOf(date) {
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  const jsDay = d.getDay(); // Вс=0, Пн=1...
-  const diff = jsDay === 0 ? -6 : 1 - jsDay;
-  d.setDate(d.getDate() + diff);
-  return d;
+
+// Строка YYYY-MM-DD из локальной даты (НЕ UTC!)
+function toLocalDateStr(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
+// Парсинг YYYY-MM-DD как локальной даты (а не UTC)
+function parseLocalDate(s) {
+  if (!s || typeof s !== 'string') return null;
+  const parts = s.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return null;
+  const [y, m, d] = parts;
+  const dt = new Date(y, m - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== m - 1 || dt.getDate() !== d) return null;
+  return dt;
+}
+
+// Понедельник недели, в которую попадает дата (локально, без времени)
+function getMondayOf(date) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const jsDay = d.getDay(); // Вс=0, Пн=1, ...
+  const diff = jsDay === 0 ? -6 : 1 - jsDay;
+  d.setDate(d.getDate() + diff);
+  return d; // локальная дата понедельника, время 00:00
+}
+
+// Разница в целых днях между двумя локальными датами
+function daysBetween(a, b) {
+  const aUTC = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
+  const bUTC = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
+  return Math.round((aUTC - bUTC) / (24 * 60 * 60 * 1000));
+}
+
+// Якорь недели: { monday: Date (локальный понедельник), type: 'numerator'|'denominator' }
 function getWeekAnchor() {
-  const savedDate = localStorage.getItem('diary_anchorDate');
+  const savedDateStr = localStorage.getItem('diary_anchorDate');
   const savedType = localStorage.getItem('diary_anchorType');
-  if (savedDate) {
-    const d = new Date(savedDate);
-    if (!isNaN(d.getTime())) {
-      return {
-        monday: getMondayOf(d),
-        type: savedType === 'numerator' ? 'numerator' : 'denominator'
-      };
-    }
+  const savedMonday = parseLocalDate(savedDateStr);
+  if (savedMonday) {
+    return {
+      monday: getMondayOf(savedMonday),
+      type: savedType === 'numerator' ? 'numerator' : 'denominator'
+    };
   }
+  // Первый запуск: текущая неделя = знаменатель
   const todayMonday = getMondayOf(new Date());
-  localStorage.setItem('diary_anchorDate', todayMonday.toISOString());
+  localStorage.setItem('diary_anchorDate', toLocalDateStr(todayMonday));
   localStorage.setItem('diary_anchorType', 'denominator');
   return { monday: todayMonday, type: 'denominator' };
 }
 
+// Тип недели для конкретной даты
 function getWeekType(date) {
   const anchor = getWeekAnchor();
   const targetMonday = getMondayOf(date);
-  const diffMs = targetMonday - anchor.monday;
-  const diffWeeks = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+  const diffDays = daysBetween(targetMonday, anchor.monday);
+  const diffWeeks = Math.round(diffDays / 7);
+  // Чётное смещение — тот же тип, нечётное — противоположный
   if (diffWeeks % 2 === 0) return anchor.type;
   return anchor.type === 'numerator' ? 'denominator' : 'numerator';
 }
@@ -1215,7 +1243,7 @@ function renderHW() {
 // ============================================================
 function setAnchorType(type) {
   const monday = getMondayOf(new Date());
-  localStorage.setItem('diary_anchorDate', monday.toISOString());
+  localStorage.setItem('diary_anchorDate', toLocalDateStr(monday)); // ← локальная YYYY-MM-DD
   localStorage.setItem('diary_anchorType', type);
   renderSettings();
   renderSchedule();

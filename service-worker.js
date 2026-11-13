@@ -2,7 +2,7 @@
 // Service Worker для офлайн-работы
 // Версия кэша — меняй при обновлении файлов!
 // ============================================================
-const CACHE_VERSION = 'diary-v8-1';
+const CACHE_VERSION = 'diary-v8-4';
 const ASSETS = [
   './',
   './index.html',

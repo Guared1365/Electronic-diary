@@ -155,6 +155,13 @@
     box-shadow: inset 0 0 0 2px #ffc107;
     animation: pulse 2s infinite;
   }
+  .lesson-row.highlight {
+    animation: highlight-flash 1.5s ease-out;
+  }
+  @keyframes highlight-flash {
+    0% { background: #ffe89a; box-shadow: 0 0 0 4px #ffc107; }
+    100% { background: transparent; box-shadow: 0 0 0 0 transparent; }
+  }
   @keyframes pulse {
     0%, 100% { box-shadow: inset 0 0 0 2px #ffc107; }
     50% { box-shadow: inset 0 0 0 3px #ff9800; }
@@ -225,6 +232,8 @@
   .icon-btn.cancel.active { background: #ff4757; color: white; border-color: #ff4757; }
   .icon-btn.edit-btn { background: #e8f4ff; color: #1a5f9f; }
   .icon-btn.edit-btn:hover { background: #cce4ff; }
+  .icon-btn.hw-btn { background: #fff3c4; color: #b8860b; }
+  .icon-btn.hw-btn:hover { background: #ffe89a; }
   .icon-btn.del-btn { background: transparent; color: #ff4757; font-size: 16px; font-weight: bold; }
   .icon-btn.del-btn:hover { background: #ffe0e0; }
   .icon-btn:disabled { opacity: .3; cursor: not-allowed; }
@@ -233,6 +242,7 @@
     font-size: 12px; font-weight: 700;
     padding: 2px 8px; border-radius: 10px;
     margin-left: 6px; vertical-align: middle;
+    transition: transform .3s;
   }
   .legend {
     display: flex; gap: 15px; flex-wrap: wrap;
@@ -335,6 +345,7 @@
     border-left: 4px solid #4caf50;
     display: flex; justify-content: space-between;
     align-items: center; gap: 10px;
+    flex-wrap: wrap;
   }
   .cal-day-lesson.seminar { border-left-color: #ff9800; }
   .cal-day-lesson.cancelled { opacity: .6; border-left-color: #ccc; }
@@ -365,7 +376,6 @@
     margin-bottom: 15px;
   }
   .offline-badge.show { display: block; }
-  /* Модальное окно редактирования */
   .modal-overlay {
     display: none; position: fixed; inset: 0;
     background: rgba(0,0,0,.5); z-index: 1000;
@@ -391,6 +401,20 @@
     background: #e0e0e0; color: #666;
   }
   .modal .btn-cancel:hover { background: #d0d0d0; }
+  .modal .btn-warn {
+    background: #ff9800; color: white;
+  }
+  .modal .btn-warn:hover { background: #f57c00; }
+  .dupe-warning {
+    background: #fff3c4;
+    border-left: 4px solid #ff9800;
+    padding: 12px;
+    border-radius: 8px;
+    margin: 10px 0;
+    font-size: 13px;
+    color: #5a3a00;
+  }
+  .dupe-warning b { color: #b35c00; }
   @media (max-width: 600px) {
     .cal-day { min-height: 60px; padding: 4px; }
     .cal-lesson-dot { font-size: 9px; padding: 1px 3px; }
@@ -558,7 +582,7 @@
   </div>
 </div>
 
-<!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ УРОКА -->
+<!-- МОДАЛКА РЕДАКТИРОВАНИЯ УРОКА -->
 <div class="modal-overlay" id="editModal">
   <div class="modal">
     <h2>✏️ Редактировать урок</h2>
@@ -603,9 +627,36 @@
   </div>
 </div>
 
+<!-- МОДАЛКА ДОБАВЛЕНИЯ Д/З ИЗ УРОКА -->
+<div class="modal-overlay" id="hwModal">
+  <div class="modal">
+    <h2>📝 Добавить домашнее задание</h2>
+    <input type="hidden" id="hwLessonId">
+
+    <div class="row-2">
+      <input id="hwSubject" placeholder="Предмет" style="flex:1.5" maxlength="100">
+      <input id="hwDate" type="date" style="flex:1">
+    </div>
+
+    <div class="row-2">
+      <textarea id="hwTask" placeholder="Что задали?" rows="4"
+                style="flex:1;resize:vertical;min-height:80px" maxlength="500"></textarea>
+    </div>
+
+    <div id="hwLessonInfo" style="font-size:12px;color:#999;margin-bottom:10px;padding-left:4px"></div>
+
+    <div id="hwDupeWarning" class="dupe-warning" style="display:none"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeHWModal()">Отмена</button>
+      <button class="btn" onclick="saveHWFromLesson()">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
-// БЕЗОПАСНОСТЬ: экранирование (XSS)
+// БЕЗОПАСНОСТЬ
 // ============================================================
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -614,9 +665,6 @@ function esc(s) {
   }[c]));
 }
 
-// ============================================================
-// Валидация данных
-// ============================================================
 function isValidDateStr(s) {
   if (!s) return true;
   if (typeof s !== 'string') return false;
@@ -628,7 +676,6 @@ function isValidTimeStr(s) {
   return typeof s === 'string' && /^\d{2}:\d{2}$/.test(s);
 }
 
-// attendance: { "YYYY-MM-DD": "attended"|"missed"|"cancelled" }
 function sanitizeAttendance(att) {
   if (!att || typeof att !== 'object' || Array.isArray(att)) return {};
   const out = {};
@@ -658,7 +705,6 @@ function sanitizeLesson(l) {
     end: isValidTimeStr(l.end) ? l.end : '',
     dateFrom: isValidDateStr(l.dateFrom) ? l.dateFrom : null,
     dateTo: isValidDateStr(l.dateTo) ? l.dateTo : null,
-    // Мигрируем старый формат {status: '...'} в новый {attendance: {...}}
     attendance: sanitizeAttendance(l.attendance)
   };
 }
@@ -677,6 +723,7 @@ function sanitizeGrade(g) {
   };
 }
 
+// Д/З теперь может содержать lessonId (связь с уроком)
 function sanitizeHW(h) {
   if (!h || typeof h !== 'object') return null;
   if (typeof h.subject !== 'string' || !h.subject) return null;
@@ -686,12 +733,13 @@ function sanitizeHW(h) {
     subject: h.subject.slice(0, 100),
     task: h.task.slice(0, 500),
     date: isValidDateStr(h.date) ? (h.date || '') : '',
-    done: !!h.done
+    done: !!h.done,
+    lessonId: (typeof h.lessonId === 'string' || typeof h.lessonId === 'number') ? h.lessonId : null
   };
 }
 
 // ============================================================
-// Хранилище
+// ХРАНИЛИЩЕ
 // ============================================================
 const store = {
   get(key, sanitizer) {
@@ -726,7 +774,7 @@ const MONTHS_NOM = ['Январь','Февраль','Март','Апрель','�
 const WEEKDAY_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
 // ============================================================
-// НЕДЕЛЯ: якорная логика, ТОЛЬКО локальные даты
+// НЕДЕЛЯ
 // ============================================================
 function toLocalDateStr(date) {
   const y = date.getFullYear();
@@ -885,14 +933,31 @@ function findNextLesson() {
 // ВКЛАДКИ
 // ============================================================
 let currentWeekView = 'current';
+let highlightLessonId = null; // для перехода "к уроку" из Д/З
 
 function switchTab(name, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  (btn || event.target).closest('.tab').classList.add('active');
+  const targetBtn = btn || (event && event.target && event.target.closest('.tab'));
+  if (targetBtn) targetBtn.classList.add('active');
   document.getElementById(name).classList.add('active');
   if (name === 'calendar') renderCalendar();
   if (name === 'settings') renderSettings();
+  if (name === 'schedule') {
+    renderSchedule();
+    // Прокрутка/подсветка после рендера
+    if (highlightLessonId) {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-lesson-id="${CSS.escape(String(highlightLessonId))}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('highlight');
+          setTimeout(() => el.classList.remove('highlight'), 1600);
+        }
+        highlightLessonId = null;
+      }, 50);
+    }
+  }
 }
 
 function setWeekView(view) {
@@ -933,7 +998,6 @@ function addLesson() {
   renderSchedule(); renderCalendar();
 }
 
-// Открыть модалку редактирования
 function openEditModal(id) {
   const data = store.get('schedule', sanitizeLesson);
   const l = data.find(x => x.id === id);
@@ -995,7 +1059,6 @@ function delLesson(id) {
   renderSchedule(); renderCalendar();
 }
 
-// Переключение статуса на КОНКРЕТНУЮ дату
 function toggleStatus(id, status, dateStr) {
   const data = store.get('schedule', sanitizeLesson);
   const item = data.find(x => x.id === id);
@@ -1059,7 +1122,6 @@ function renderSchedule() {
     const isToday = dayIdx === todayIdx;
     const todayStr = toLocalDateStr(new Date());
 
-    // Длительность дня — только не отменённые на СЕГОДНЯ (если сегодня), иначе считаем все
     const totalMin = lessons.reduce((s, l) => {
       const att = isToday ? l.attendance?.[todayStr] : null;
       if (att === 'cancelled') return s;
@@ -1098,11 +1160,10 @@ function renderSchedule() {
           if (l.room) metaParts.push(`<span>🚪 ${esc(l.room)}</span>`);
           if (l.teacher) metaParts.push(`<span>👤 ${esc(l.teacher)}</span>`);
 
-          // Кнопки статусов: активны только если есть ближайшая дата
           const disabled = !dateStr ? 'disabled' : '';
           const toggleArgs = dateStr ? `'${esc(String(l.id))}', STATUS, '${dateStr}'` : '';
 
-          return `<div class="lesson-row ${rowClass}">
+          return `<div class="lesson-row ${rowClass}" data-lesson-id="${esc(String(l.id))}">
             <div class="lesson-info">
               <strong>${esc(l.num ? l.num + '.' : '•')}</strong>
               <span class="subject-name">${esc(l.subject)}</span>
@@ -1122,6 +1183,8 @@ function renderSchedule() {
                       onclick="toggleStatus(${toggleArgs.replace('STATUS', "'missed'")})" title="Пропустил">✗</button>
               <button class="icon-btn cancel ${att === 'cancelled' ? 'active' : ''}" ${disabled}
                       onclick="toggleStatus(${toggleArgs.replace('STATUS', "'cancelled'")})" title="Отменён">🚫</button>
+              <button class="icon-btn hw-btn" ${disabled}
+                      onclick="openHWModal('${esc(String(l.id))}')" title="Добавить Д/З">📝</button>
               <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
               <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
             </div>
@@ -1209,7 +1272,6 @@ function renderCalendar() {
   document.getElementById('calTitle').textContent = `${MONTHS_NOM[calMonth]} ${calYear}`;
   const grid = document.getElementById('calGrid');
   const today = new Date(); today.setHours(0,0,0,0);
-  const todayStr = toLocalDateStr(today);
   let html = WEEKDAY_SHORT.map(d => `<div class="cal-weekday">${d}</div>`).join('');
   const first = new Date(calYear, calMonth, 1);
   const startOffset = first.getDay() === 0 ? 6 : first.getDay() - 1;
@@ -1296,11 +1358,126 @@ function renderCalDayDetails() {
                   onclick="toggleStatus('${esc(String(l.id))}', 'missed', '${dateStr}')" title="Пропуск">✗</button>
           <button class="icon-btn cancel ${att === 'cancelled' ? 'active' : ''}"
                   onclick="toggleStatus('${esc(String(l.id))}', 'cancelled', '${dateStr}')" title="Отменён">🚫</button>
+          <button class="icon-btn hw-btn" onclick="openHWModal('${esc(String(l.id))}')" title="Добавить Д/З">📝</button>
           <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
         </div>
       </div>`;
     }).join('')}
   </div>`;
+}
+
+// ============================================================
+// Д/З ИЗ КАРТОЧКИ УРОКА
+// ============================================================
+function openHWModal(lessonId) {
+  const data = store.get('schedule', sanitizeLesson);
+  const l = data.find(x => x.id === lessonId);
+  if (!l) return;
+
+  const nextDate = getNextLessonDate(l);
+  if (!nextDate) {
+    alert('У этого урока нет ближайшей даты (вне периода действия). Сначала проверь настройки урока.');
+    return;
+  }
+
+  document.getElementById('hwLessonId').value = l.id;
+  document.getElementById('hwSubject').value = l.subject;
+  document.getElementById('hwDate').value = toLocalDateStr(nextDate);
+  document.getElementById('hwTask').value = '';
+
+  const infoParts = [];
+  if (l.type) infoParts.push(l.type === 'lecture' ? '🟢 Лекция' : '🟠 Семинар');
+  if (l.start) infoParts.push(`🕐 ${l.start}–${l.end || '?'}`);
+  if (l.room) infoParts.push(`🚪 ${l.room}`);
+  if (l.teacher) infoParts.push(`👤 ${l.teacher}`);
+  document.getElementById('hwLessonInfo').textContent =
+    `К занятию: ${fmtDate(nextDate)} • ${infoParts.join(' • ')}`;
+
+  // Проверка на дубль
+  updateDupeWarning(l.id, l.subject, toLocalDateStr(nextDate));
+
+  document.getElementById('hwModal').classList.add('show');
+  setTimeout(() => document.getElementById('hwTask').focus(), 100);
+}
+
+function updateDupeWarning(lessonId, subject, dateStr) {
+  const warning = document.getElementById('hwDupeWarning');
+  const hwList = store.get('homework', sanitizeHW);
+  const dupe = hwList.find(h =>
+    !h.done &&
+    h.subject.toLowerCase() === subject.toLowerCase() &&
+    h.date === dateStr
+  );
+  if (dupe) {
+    warning.style.display = 'block';
+    warning.innerHTML = `
+      <b>⚠️ Д/З уже существует</b><br>
+      На предмет «${esc(dupe.subject)}» с датой ${esc(dupe.date)} уже есть задание:
+      «${esc(dupe.task.slice(0, 60))}${dupe.task.length > 60 ? '…' : ''}».
+      <br>
+      <a href="javascript:void(0)" onclick="goToLessonFromDupe('${esc(String(dupe.id))}')"
+         style="color:#b35c00;font-weight:700;text-decoration:underline">
+        Перейти к нему →
+      </a>
+      <br>Всё равно можно сохранить дубликат.
+    `;
+  } else {
+    warning.style.display = 'none';
+    warning.innerHTML = '';
+  }
+}
+
+function goToLessonFromDupe(hwId) {
+  closeHWModal();
+  const hw = store.get('homework', sanitizeHW).find(h => h.id === hwId);
+  if (!hw) return;
+  // Переключаемся на вкладку Д/З
+  const btn = Array.from(document.querySelectorAll('.tab')).find(b => b.textContent.includes('Д/З'));
+  if (btn) switchTab('homework', btn);
+}
+
+function closeHWModal() {
+  document.getElementById('hwModal').classList.remove('show');
+}
+
+function saveHWFromLesson() {
+  const subject = document.getElementById('hwSubject').value.trim();
+  const task = document.getElementById('hwTask').value.trim();
+  const date = document.getElementById('hwDate').value;
+  const lessonId = document.getElementById('hwLessonId').value || null;
+
+  if (!subject) return alert('Введите предмет');
+  if (!task) return alert('Введите текст задания');
+
+  // Проверка дубля — просим подтверждение, если уже есть
+  const hwList = store.get('homework', sanitizeHW);
+  const dupe = hwList.find(h =>
+    !h.done &&
+    h.subject.toLowerCase() === subject.toLowerCase() &&
+    h.date === date
+  );
+  if (dupe) {
+    if (!confirm(`На этот предмет (${subject}) уже есть Д/З с датой ${date}.\nСоздать дубликат?`)) return;
+  }
+
+  hwList.push({
+    id: crypto.randomUUID(),
+    subject,
+    task,
+    date: date || '',
+    done: false,
+    lessonId
+  });
+  store.set('homework', hwList);
+
+  closeHWModal();
+  renderHW();
+
+  const counter = document.getElementById('hwCounter');
+  if (counter) {
+    counter.style.transform = 'scale(1.4)';
+    setTimeout(() => counter.style.transform = 'scale(1)', 300);
+  }
 }
 
 // ============================================================
@@ -1360,7 +1537,7 @@ function addHW() {
   const date = document.getElementById('hDate').value;
   if (!subject || !task) return alert('Заполните предмет и задание');
   const data = store.get('homework', sanitizeHW);
-  data.push({ id: crypto.randomUUID(), subject, task, date, done: false });
+  data.push({ id: crypto.randomUUID(), subject, task, date, done: false, lessonId: null });
   store.set('homework', data);
   ['hSubject','hTask'].forEach(id => document.getElementById(id).value = '');
   renderHW();
@@ -1378,6 +1555,20 @@ function toggleHW(id) {
   if (item) item.done = !item.done;
   store.set('homework', data);
   renderHW();
+}
+
+// Переход к уроку из Д/З
+function goToLesson(lessonId) {
+  if (!lessonId) return;
+  const data = store.get('schedule', sanitizeLesson);
+  const exists = data.find(l => l.id === lessonId);
+  if (!exists) {
+    alert('Урок, к которому было привязано это Д/З, был удалён.');
+    return;
+  }
+  highlightLessonId = lessonId;
+  const btn = Array.from(document.querySelectorAll('.tab')).find(b => b.textContent.includes('Расписание'));
+  if (btn) switchTab('schedule', btn);
 }
 
 function renderHW() {
@@ -1400,8 +1591,14 @@ function renderHW() {
     list.innerHTML = '<div class="empty">Домашних заданий нет 🎉</div>';
     return;
   }
+
+  // Проверяем, какие уроки существуют (для отображения кнопки перехода)
+  const schedule = store.get('schedule', sanitizeLesson);
+  const lessonIds = new Set(schedule.map(l => l.id));
+
   list.innerHTML = data.map(h => {
     const overdue = h.date && !h.done && new Date(h.date) < today;
+    const hasLinkedLesson = h.lessonId && lessonIds.has(h.lessonId);
     return `<div class="hw-item ${h.done ? 'done' : ''} ${overdue ? 'overdue' : ''}">
       <div class="hw-actions">
         <div class="checkbox ${h.done ? 'checked' : ''}" onclick="toggleHW('${esc(String(h.id))}')">${h.done ? '✓' : ''}</div>
@@ -1411,6 +1608,14 @@ function renderHW() {
         <div class="subject">${esc(h.subject)}</div>
         <div class="task">${esc(h.task)}</div>
         ${h.date ? `<div class="date ${overdue ? 'overdue-text' : ''}">📅 до ${esc(h.date)}${overdue ? ' — ПРОСРОЧЕНО' : ''}</div>` : ''}
+        ${hasLinkedLesson
+          ? `<button class="btn" onclick="goToLesson('${esc(String(h.lessonId))}')"
+                     style="background:#e8f4ff;color:#1a5f9f;padding:4px 10px;font-size:11px;margin-top:6px">
+              ↗ Перейти к уроку
+             </button>`
+          : (h.lessonId
+            ? `<div class="date" style="color:#ff4757">⚠️ Урок удалён</div>`
+            : '')}
       </div>
     </div>`;
   }).join('');
@@ -1539,9 +1744,12 @@ window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
 
-// Закрытие модалки по клику на фон
+// Закрытие модалок по клику на фон
 document.getElementById('editModal').addEventListener('click', (e) => {
   if (e.target.id === 'editModal') closeEditModal();
+});
+document.getElementById('hwModal').addEventListener('click', (e) => {
+  if (e.target.id === 'hwModal') closeHWModal();
 });
 
 // ============================================================

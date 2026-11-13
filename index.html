@@ -211,7 +211,7 @@
   .week-badge.numerator { background: #e0f0ff; color: #1a5f9f; }
   .week-badge.denominator { background: #ffe8f5; color: #a0166c; }
   .week-badge.both { background: #f0e8ff; color: #5a3a7d; }
-  .lesson-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; }
+  .lesson-actions { display: flex; gap: 4px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
   .icon-btn {
     width: 32px; height: 32px; border: 2px solid transparent;
     border-radius: 8px; cursor: pointer;
@@ -223,8 +223,11 @@
   .icon-btn.attend.active { background: #4caf50; color: white; border-color: #4caf50; }
   .icon-btn.miss.active { background: #ff9800; color: white; border-color: #ff9800; }
   .icon-btn.cancel.active { background: #ff4757; color: white; border-color: #ff4757; }
+  .icon-btn.edit-btn { background: #e8f4ff; color: #1a5f9f; }
+  .icon-btn.edit-btn:hover { background: #cce4ff; }
   .icon-btn.del-btn { background: transparent; color: #ff4757; font-size: 16px; font-weight: bold; }
   .icon-btn.del-btn:hover { background: #ffe0e0; }
+  .icon-btn:disabled { opacity: .3; cursor: not-allowed; }
   .hw-counter {
     display: inline-block; background: #ff4757; color: white;
     font-size: 12px; font-weight: 700;
@@ -362,6 +365,32 @@
     margin-bottom: 15px;
   }
   .offline-badge.show { display: block; }
+  /* Модальное окно редактирования */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.5); z-index: 1000;
+    align-items: center; justify-content: center;
+    padding: 20px; overflow-y: auto;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: white; border-radius: 15px;
+    padding: 20px; max-width: 600px; width: 100%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    max-height: 90vh; overflow-y: auto;
+  }
+  .modal h2 {
+    color: #764ba2; font-size: 18px;
+    margin-bottom: 15px;
+  }
+  .modal .modal-actions {
+    display: flex; gap: 8px; margin-top: 15px;
+  }
+  .modal .modal-actions .btn { flex: 1; }
+  .modal .btn-cancel {
+    background: #e0e0e0; color: #666;
+  }
+  .modal .btn-cancel:hover { background: #d0d0d0; }
   @media (max-width: 600px) {
     .cal-day { min-height: 60px; padding: 4px; }
     .cal-lesson-dot { font-size: 9px; padding: 1px 3px; }
@@ -435,7 +464,7 @@
       <button class="btn" onclick="addLesson()" style="flex:1">+ Добавить</button>
     </div>
     <div style="font-size:11px;color:#999;margin-bottom:12px;padding-left:4px">
-      💡 Пустые даты — урок действует весь семестр
+      💡 Пустые даты — урок действует весь семестр. Статусы «Был/Пропуск/Отменён» ставятся отдельно на каждую дату.
     </div>
 
     <div id="nowBlock"></div>
@@ -529,9 +558,54 @@
   </div>
 </div>
 
+<!-- МОДАЛЬНОЕ ОКНО РЕДАКТИРОВАНИЯ УРОКА -->
+<div class="modal-overlay" id="editModal">
+  <div class="modal">
+    <h2>✏️ Редактировать урок</h2>
+    <input type="hidden" id="editId">
+    <div class="row">
+      <select id="eDay" style="flex:1.2">
+        <option>Понедельник</option><option>Вторник</option><option>Среда</option>
+        <option>Четверг</option><option>Пятница</option><option>Суббота</option>
+      </select>
+      <select id="eWeek" style="flex:1.2">
+        <option value="both">Каждую неделю</option>
+        <option value="numerator">Числитель (I)</option>
+        <option value="denominator">Знаменатель (II)</option>
+      </select>
+      <select id="eType" style="flex:1">
+        <option value="lecture">🟢 Лекция</option>
+        <option value="seminar">🟠 Семинар</option>
+      </select>
+      <input id="eNum" type="number" placeholder="№" min="1" style="max-width:70px">
+    </div>
+    <div class="row-2">
+      <input id="eSubject" placeholder="Предмет" style="flex:2" maxlength="100">
+      <input id="eRoom" placeholder="Кабинет" style="flex:1" maxlength="30">
+      <input id="eTeacher" placeholder="Преподаватель" style="flex:1.5" maxlength="100">
+    </div>
+    <div class="row-2">
+      <input id="eStart" type="time" title="Начало">
+      <input id="eEnd" type="time" title="Конец">
+    </div>
+    <div class="row-2">
+      <label style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#666">
+        Действует с: <input id="eDateFrom" type="date" style="flex:1">
+      </label>
+      <label style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#666">
+        по: <input id="eDateTo" type="date" style="flex:1">
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-cancel" onclick="closeEditModal()">Отмена</button>
+      <button class="btn" onclick="saveEditedLesson()">💾 Сохранить</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
-// БЕЗОПАСНОСТЬ: экранирование пользовательского ввода (XSS)
+// БЕЗОПАСНОСТЬ: экранирование (XSS)
 // ============================================================
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -541,7 +615,7 @@ function esc(s) {
 }
 
 // ============================================================
-// Валидация данных из localStorage
+// Валидация данных
 // ============================================================
 function isValidDateStr(s) {
   if (!s) return true;
@@ -553,6 +627,19 @@ function isValidTimeStr(s) {
   if (!s) return true;
   return typeof s === 'string' && /^\d{2}:\d{2}$/.test(s);
 }
+
+// attendance: { "YYYY-MM-DD": "attended"|"missed"|"cancelled" }
+function sanitizeAttendance(att) {
+  if (!att || typeof att !== 'object' || Array.isArray(att)) return {};
+  const out = {};
+  Object.keys(att).forEach(k => {
+    if (isValidDateStr(k) && ['attended','missed','cancelled'].includes(att[k])) {
+      out[k] = att[k];
+    }
+  });
+  return out;
+}
+
 function sanitizeLesson(l) {
   if (!l || typeof l !== 'object') return null;
   const day = DAYS.includes(l.day) ? l.day : null;
@@ -571,9 +658,11 @@ function sanitizeLesson(l) {
     end: isValidTimeStr(l.end) ? l.end : '',
     dateFrom: isValidDateStr(l.dateFrom) ? l.dateFrom : null,
     dateTo: isValidDateStr(l.dateTo) ? l.dateTo : null,
-    status: ['attended','missed','cancelled',null].includes(l.status) ? l.status : null
+    // Мигрируем старый формат {status: '...'} в новый {attendance: {...}}
+    attendance: sanitizeAttendance(l.attendance)
   };
 }
+
 function sanitizeGrade(g) {
   if (!g || typeof g !== 'object') return null;
   if (typeof g.subject !== 'string' || !g.subject) return null;
@@ -587,6 +676,7 @@ function sanitizeGrade(g) {
     comment: typeof g.comment === 'string' ? g.comment.slice(0, 200) : ''
   };
 }
+
 function sanitizeHW(h) {
   if (!h || typeof h !== 'object') return null;
   if (typeof h.subject !== 'string' || !h.subject) return null;
@@ -613,7 +703,7 @@ const store = {
       if (sanitizer) return arr.map(sanitizer).filter(Boolean);
       return arr;
     } catch (e) {
-      console.warn('Ошибка чтения данных:', e);
+      console.warn('Ошибка чтения:', e);
       return [];
     }
   },
@@ -621,7 +711,7 @@ const store = {
     try {
       localStorage.setItem('diary_' + key, JSON.stringify(val));
     } catch (e) {
-      alert('Не удалось сохранить данные: ' + e.message);
+      alert('Не удалось сохранить: ' + e.message);
     }
   }
 };
@@ -636,11 +726,8 @@ const MONTHS_NOM = ['Январь','Февраль','Март','Апрель','�
 const WEEKDAY_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
 // ============================================================
-// ОПРЕДЕЛЕНИЕ НЕДЕЛИ (числитель/знаменатель)
-// Всё работаем с локальными датами YYYY-MM-DD.
+// НЕДЕЛЯ: якорная логика, ТОЛЬКО локальные даты
 // ============================================================
-
-// Строка YYYY-MM-DD из локальной даты (НЕ UTC!)
 function toLocalDateStr(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -648,7 +735,6 @@ function toLocalDateStr(date) {
   return `${y}-${m}-${d}`;
 }
 
-// Парсинг YYYY-MM-DD как локальной даты (а не UTC)
 function parseLocalDate(s) {
   if (!s || typeof s !== 'string') return null;
   const parts = s.split('-').map(Number);
@@ -659,23 +745,20 @@ function parseLocalDate(s) {
   return dt;
 }
 
-// Понедельник недели, в которую попадает дата (локально, без времени)
 function getMondayOf(date) {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-  const jsDay = d.getDay(); // Вс=0, Пн=1, ...
+  const jsDay = d.getDay();
   const diff = jsDay === 0 ? -6 : 1 - jsDay;
   d.setDate(d.getDate() + diff);
-  return d; // локальная дата понедельника, время 00:00
+  return d;
 }
 
-// Разница в целых днях между двумя локальными датами
 function daysBetween(a, b) {
   const aUTC = Date.UTC(a.getFullYear(), a.getMonth(), a.getDate());
   const bUTC = Date.UTC(b.getFullYear(), b.getMonth(), b.getDate());
   return Math.round((aUTC - bUTC) / (24 * 60 * 60 * 1000));
 }
 
-// Якорь недели: { monday: Date (локальный понедельник), type: 'numerator'|'denominator' }
 function getWeekAnchor() {
   const savedDateStr = localStorage.getItem('diary_anchorDate');
   const savedType = localStorage.getItem('diary_anchorType');
@@ -686,36 +769,32 @@ function getWeekAnchor() {
       type: savedType === 'numerator' ? 'numerator' : 'denominator'
     };
   }
-  // Первый запуск: текущая неделя = знаменатель
   const todayMonday = getMondayOf(new Date());
   localStorage.setItem('diary_anchorDate', toLocalDateStr(todayMonday));
   localStorage.setItem('diary_anchorType', 'denominator');
   return { monday: todayMonday, type: 'denominator' };
 }
 
-// Тип недели для конкретной даты
 function getWeekType(date) {
   const anchor = getWeekAnchor();
   const targetMonday = getMondayOf(date);
-  const diffDays = daysBetween(targetMonday, anchor.monday);
-  const diffWeeks = Math.round(diffDays / 7);
-  // Чётное смещение — тот же тип, нечётное — противоположный
+  const diffWeeks = Math.round(daysBetween(targetMonday, anchor.monday) / 7);
   if (diffWeeks % 2 === 0) return anchor.type;
   return anchor.type === 'numerator' ? 'denominator' : 'numerator';
 }
 
 // ============================================================
-// УТИЛИТЫ ДАТ
+// УТИЛИТЫ
 // ============================================================
 function isDateInLessonPeriod(lesson, date) {
-  const d = new Date(date); d.setHours(0,0,0,0);
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
   if (lesson.dateFrom) {
-    const from = new Date(lesson.dateFrom); from.setHours(0,0,0,0);
-    if (d < from) return false;
+    const from = parseLocalDate(lesson.dateFrom);
+    if (from && d < from) return false;
   }
   if (lesson.dateTo) {
-    const to = new Date(lesson.dateTo); to.setHours(0,0,0,0);
-    if (d > to) return false;
+    const to = parseLocalDate(lesson.dateTo);
+    if (to && d > to) return false;
   }
   return true;
 }
@@ -782,18 +861,24 @@ function isLessonNow(lesson, date) {
   if (!date) return false;
   const today = new Date(); today.setHours(0,0,0,0);
   if (date.getTime() !== today.getTime()) return false;
-  if (lesson.status === 'cancelled') return false;
+  const att = lesson.attendance?.[toLocalDateStr(date)];
+  if (att === 'cancelled') return false;
   const now = new Date();
   const curMin = now.getHours() * 60 + now.getMinutes();
   return curMin >= timeToMin(lesson.start) && curMin < timeToMin(lesson.end);
 }
+
 function findCurrentLesson() {
   return getLessonsForDate(new Date()).find(l => isLessonNow(l, new Date()));
 }
+
 function findNextLesson() {
   const curMin = (() => { const n = new Date(); return n.getHours()*60 + n.getMinutes(); })();
   return getLessonsForDate(new Date())
-    .find(l => l.status !== 'cancelled' && timeToMin(l.start) > curMin);
+    .find(l => {
+      const att = l.attendance?.[toLocalDateStr(new Date())];
+      return att !== 'cancelled' && timeToMin(l.start) > curMin;
+    });
 }
 
 // ============================================================
@@ -839,7 +924,7 @@ function addLesson() {
   const data = store.get('schedule', sanitizeLesson);
   data.push({
     id: crypto.randomUUID(), day, week, type, num, subject, room, teacher,
-    start, end, dateFrom: dateFrom || null, dateTo: dateTo || null, status: null
+    start, end, dateFrom: dateFrom || null, dateTo: dateTo || null, attendance: {}
   });
   store.set('schedule', data);
   ['sNum','sSubject','sRoom','sTeacher','sStart','sEnd','sDateFrom','sDateTo'].forEach(id => {
@@ -848,17 +933,79 @@ function addLesson() {
   renderSchedule(); renderCalendar();
 }
 
+// Открыть модалку редактирования
+function openEditModal(id) {
+  const data = store.get('schedule', sanitizeLesson);
+  const l = data.find(x => x.id === id);
+  if (!l) return;
+  document.getElementById('editId').value = l.id;
+  document.getElementById('eDay').value = l.day;
+  document.getElementById('eWeek').value = l.week;
+  document.getElementById('eType').value = l.type;
+  document.getElementById('eNum').value = l.num;
+  document.getElementById('eSubject').value = l.subject;
+  document.getElementById('eRoom').value = l.room;
+  document.getElementById('eTeacher').value = l.teacher;
+  document.getElementById('eStart').value = l.start;
+  document.getElementById('eEnd').value = l.end;
+  document.getElementById('eDateFrom').value = l.dateFrom || '';
+  document.getElementById('eDateTo').value = l.dateTo || '';
+  document.getElementById('editModal').classList.add('show');
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').classList.remove('show');
+}
+
+function saveEditedLesson() {
+  const id = document.getElementById('editId').value;
+  const day = document.getElementById('eDay').value;
+  const week = document.getElementById('eWeek').value;
+  const type = document.getElementById('eType').value;
+  const num = document.getElementById('eNum').value.trim();
+  const subject = document.getElementById('eSubject').value.trim();
+  const room = document.getElementById('eRoom').value.trim();
+  const teacher = document.getElementById('eTeacher').value.trim();
+  const start = document.getElementById('eStart').value;
+  const end = document.getElementById('eEnd').value;
+  const dateFrom = document.getElementById('eDateFrom').value;
+  const dateTo = document.getElementById('eDateTo').value;
+
+  if (!subject) return alert('Введите предмет');
+  if (start && end && end <= start) return alert('Конец должен быть позже начала');
+  if (dateFrom && dateTo && dateTo < dateFrom) return alert('Дата «по» должна быть позже «с»');
+
+  const data = store.get('schedule', sanitizeLesson);
+  const idx = data.findIndex(x => x.id === id);
+  if (idx === -1) return alert('Урок не найден');
+
+  data[idx] = {
+    ...data[idx],
+    day, week, type, num, subject, room, teacher,
+    start, end, dateFrom: dateFrom || null, dateTo: dateTo || null
+  };
+  store.set('schedule', data);
+  closeEditModal();
+  renderSchedule(); renderCalendar();
+}
+
 function delLesson(id) {
-  if (!confirm('Удалить этот урок?')) return;
+  if (!confirm('Удалить этот урок? Все отметки посещаемости тоже удалятся.')) return;
   store.set('schedule', store.get('schedule', sanitizeLesson).filter(x => x.id !== id));
   renderSchedule(); renderCalendar();
 }
 
-function toggleStatus(id, status) {
+// Переключение статуса на КОНКРЕТНУЮ дату
+function toggleStatus(id, status, dateStr) {
   const data = store.get('schedule', sanitizeLesson);
   const item = data.find(x => x.id === id);
   if (!item) return;
-  item.status = (item.status === status) ? null : status;
+  if (!item.attendance) item.attendance = {};
+  if (item.attendance[dateStr] === status) {
+    delete item.attendance[dateStr];
+  } else {
+    item.attendance[dateStr] = status;
+  }
   store.set('schedule', data);
   renderSchedule(); renderCalendar();
 }
@@ -885,8 +1032,8 @@ function typeBadge(l) {
 }
 function periodBadge(l) {
   if (!l.dateFrom && !l.dateTo) return '';
-  const from = l.dateFrom ? fmtDateShort(new Date(l.dateFrom)) : 'начала';
-  const to = l.dateTo ? fmtDateShort(new Date(l.dateTo)) : 'конца';
+  const from = l.dateFrom ? fmtDateShort(parseLocalDate(l.dateFrom)) : 'начала';
+  const to = l.dateTo ? fmtDateShort(parseLocalDate(l.dateTo)) : 'конца';
   return `<span class="period-badge">🗓 ${esc(from)} — ${esc(to)}</span>`;
 }
 
@@ -910,10 +1057,18 @@ function renderSchedule() {
       .sort((a,b) => (parseInt(a.num)||99) - (parseInt(b.num)||99));
     if (!lessons.length) return '';
     const isToday = dayIdx === todayIdx;
-    const totalMin = lessons.filter(l => l.status !== 'cancelled')
-      .reduce((s, l) => s + minutesBetween(l.start, l.end), 0);
+    const todayStr = toLocalDateStr(new Date());
+
+    // Длительность дня — только не отменённые на СЕГОДНЯ (если сегодня), иначе считаем все
+    const totalMin = lessons.reduce((s, l) => {
+      const att = isToday ? l.attendance?.[todayStr] : null;
+      if (att === 'cancelled') return s;
+      return s + minutesBetween(l.start, l.end);
+    }, 0);
     const totalStr = fmtDuration(totalMin);
-    const cancelledCount = lessons.filter(l => l.status === 'cancelled').length;
+    const cancelledCount = isToday
+      ? lessons.filter(l => l.attendance?.[todayStr] === 'cancelled').length
+      : 0;
 
     return `<div class="day-block">
       <div class="day-title ${isToday ? 'today' : ''}">
@@ -924,18 +1079,28 @@ function renderSchedule() {
         ${lessons.map(l => {
           const dur = minutesBetween(l.start, l.end);
           const nextDate = getNextLessonDate(l);
+          const dateStr = nextDate ? toLocalDateStr(nextDate) : null;
+          const att = dateStr ? l.attendance?.[dateStr] : null;
           const isNow = isLessonNow(l, nextDate);
-          const rowClass = [l.status || '', l.type ? 'type-' + l.type : '', isNow ? 'now' : ''].filter(Boolean).join(' ');
+          const rowClass = [
+            att || '',
+            l.type ? 'type-' + l.type : '',
+            isNow ? 'now' : ''
+          ].filter(Boolean).join(' ');
 
           let statusBadge = '';
           if (isNow) statusBadge = '<span class="status-badge now">▶ ИДЁТ СЕЙЧАС</span>';
-          else if (l.status === 'cancelled') statusBadge = '<span class="status-badge cancelled">ОТМЕНЁН</span>';
-          else if (l.status === 'attended') statusBadge = '<span class="status-badge attended">БЫЛ</span>';
-          else if (l.status === 'missed') statusBadge = '<span class="status-badge missed">ПРОПУСК</span>';
+          else if (att === 'cancelled') statusBadge = '<span class="status-badge cancelled">ОТМЕНЁН</span>';
+          else if (att === 'attended') statusBadge = '<span class="status-badge attended">БЫЛ</span>';
+          else if (att === 'missed') statusBadge = '<span class="status-badge missed">ПРОПУСК</span>';
 
           const metaParts = [];
           if (l.room) metaParts.push(`<span>🚪 ${esc(l.room)}</span>`);
           if (l.teacher) metaParts.push(`<span>👤 ${esc(l.teacher)}</span>`);
+
+          // Кнопки статусов: активны только если есть ближайшая дата
+          const disabled = !dateStr ? 'disabled' : '';
+          const toggleArgs = dateStr ? `'${esc(String(l.id))}', STATUS, '${dateStr}'` : '';
 
           return `<div class="lesson-row ${rowClass}">
             <div class="lesson-info">
@@ -946,19 +1111,19 @@ function renderSchedule() {
               ${nextDate ? `<span class="date-badge">📅 ${esc(fmtDate(nextDate))}</span>` : '<span class="date-badge" style="background:#ffe0e0;color:#c0392b">⛔ вне периода</span>'}
               ${periodBadge(l)}
               ${(l.start || l.end) ? `<span class="time-badge">${esc(l.start || '?')} – ${esc(l.end || '?')}</span>` : ''}
-              ${dur > 0 && l.status !== 'cancelled' ? `<span class="duration-badge">${esc(fmtDuration(dur))}</span>` : ''}
+              ${dur > 0 && att !== 'cancelled' ? `<span class="duration-badge">${esc(fmtDuration(dur))}</span>` : ''}
               ${statusBadge}
               ${metaParts.length ? `<div class="lesson-meta">${metaParts.join('')}</div>` : ''}
             </div>
             <div class="lesson-actions">
-              <button class="icon-btn attend ${l.status === 'attended' ? 'active' : ''}"
-                      onclick="toggleStatus('${esc(String(l.id))}', 'attended')" title="Присутствовал">✓</button>
-              <button class="icon-btn miss ${l.status === 'missed' ? 'active' : ''}"
-                      onclick="toggleStatus('${esc(String(l.id))}', 'missed')" title="Пропустил">✗</button>
-              <button class="icon-btn cancel ${l.status === 'cancelled' ? 'active' : ''}"
-                      onclick="toggleStatus('${esc(String(l.id))}', 'cancelled')" title="Отменён">🚫</button>
-              <button class="icon-btn del-btn"
-                      onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
+              <button class="icon-btn attend ${att === 'attended' ? 'active' : ''}" ${disabled}
+                      onclick="toggleStatus(${toggleArgs.replace('STATUS', "'attended'")})" title="Присутствовал">✓</button>
+              <button class="icon-btn miss ${att === 'missed' ? 'active' : ''}" ${disabled}
+                      onclick="toggleStatus(${toggleArgs.replace('STATUS', "'missed'")})" title="Пропустил">✗</button>
+              <button class="icon-btn cancel ${att === 'cancelled' ? 'active' : ''}" ${disabled}
+                      onclick="toggleStatus(${toggleArgs.replace('STATUS', "'cancelled'")})" title="Отменён">🚫</button>
+              <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
+              <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
             </div>
           </div>`;
         }).join('')}
@@ -1044,6 +1209,7 @@ function renderCalendar() {
   document.getElementById('calTitle').textContent = `${MONTHS_NOM[calMonth]} ${calYear}`;
   const grid = document.getElementById('calGrid');
   const today = new Date(); today.setHours(0,0,0,0);
+  const todayStr = toLocalDateStr(today);
   let html = WEEKDAY_SHORT.map(d => `<div class="cal-weekday">${d}</div>`).join('');
   const first = new Date(calYear, calMonth, 1);
   const startOffset = first.getDay() === 0 ? 6 : first.getDay() - 1;
@@ -1063,6 +1229,7 @@ function renderCalendar() {
       cellDate = new Date(calYear, calMonth, i - startOffset + 1);
     }
     cellDate.setHours(0,0,0,0);
+    const dateStr = toLocalDateStr(cellDate);
     const lessons = getLessonsForDate(cellDate);
     const isToday = cellDate.getTime() === today.getTime();
     const isSel = calSelectedDate && cellDate.getTime() === calSelectedDate.getTime();
@@ -1074,7 +1241,8 @@ function renderCalendar() {
     let lessonsHtml = '';
     const maxShow = 2;
     lessons.slice(0, maxShow).forEach(l => {
-      const tc = l.status === 'cancelled' ? 'cancelled' : l.type;
+      const att = l.attendance?.[dateStr];
+      const tc = att === 'cancelled' ? 'cancelled' : l.type;
       lessonsHtml += `<div class="cal-lesson-dot ${tc}">${esc(l.start || '')} ${esc(l.subject)}</div>`;
     });
     if (lessons.length > maxShow) lessonsHtml += `<div class="cal-more">+${lessons.length - maxShow} ещё</div>`;
@@ -1094,6 +1262,7 @@ function renderCalDayDetails() {
   const lessons = getLessonsForDate(calSelectedDate);
   const wt = getWeekType(calSelectedDate);
   const wtLabel = wt === 'numerator' ? '🔵 Числитель' : '🟣 Знаменатель';
+  const dateStr = toLocalDateStr(calSelectedDate);
 
   if (!lessons.length) {
     box.innerHTML = `<div class="cal-day-details">
@@ -1106,20 +1275,29 @@ function renderCalDayDetails() {
   box.innerHTML = `<div class="cal-day-details">
     <h3>${esc(fmtDateFull(calSelectedDate))} • ${esc(wtLabel)} • ${lessons.length} ${lessons.length === 1 ? 'занятие' : 'занятий'}</h3>
     ${lessons.map(l => {
-      const tc = l.status === 'cancelled' ? 'cancelled' : l.type;
+      const att = l.attendance?.[dateStr];
+      const tc = att === 'cancelled' ? 'cancelled' : l.type;
       const meta = [];
       if (l.room) meta.push(`🚪 ${esc(l.room)}`);
       if (l.teacher) meta.push(`👤 ${esc(l.teacher)}`);
       if (l.start) meta.push(`🕐 ${esc(l.start)}–${esc(l.end || '?')}`);
-      const st = l.status === 'cancelled' ? ' • ОТМЕНЁН'
-        : l.status === 'attended' ? ' • БЫЛ'
-        : l.status === 'missed' ? ' • ПРОПУСК' : '';
+      const st = att === 'cancelled' ? ' • ОТМЕНЁН'
+        : att === 'attended' ? ' • БЫЛ'
+        : att === 'missed' ? ' • ПРОПУСК' : '';
       return `<div class="cal-day-lesson ${tc}">
         <div>
           <div class="subject">${esc(l.num ? l.num + '. ' : '')}${esc(l.subject)}</div>
           <div class="meta">${meta.join(' • ')}${st}</div>
         </div>
-        <span class="type-badge ${l.type}">${l.type === 'lecture' ? 'Лекция' : 'Семинар'}</span>
+        <div class="lesson-actions">
+          <button class="icon-btn attend ${att === 'attended' ? 'active' : ''}"
+                  onclick="toggleStatus('${esc(String(l.id))}', 'attended', '${dateStr}')" title="Был">✓</button>
+          <button class="icon-btn miss ${att === 'missed' ? 'active' : ''}"
+                  onclick="toggleStatus('${esc(String(l.id))}', 'missed', '${dateStr}')" title="Пропуск">✗</button>
+          <button class="icon-btn cancel ${att === 'cancelled' ? 'active' : ''}"
+                  onclick="toggleStatus('${esc(String(l.id))}', 'cancelled', '${dateStr}')" title="Отменён">🚫</button>
+          <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
+        </div>
       </div>`;
     }).join('')}
   </div>`;
@@ -1243,7 +1421,7 @@ function renderHW() {
 // ============================================================
 function setAnchorType(type) {
   const monday = getMondayOf(new Date());
-  localStorage.setItem('diary_anchorDate', toLocalDateStr(monday)); // ← локальная YYYY-MM-DD
+  localStorage.setItem('diary_anchorDate', toLocalDateStr(monday));
   localStorage.setItem('diary_anchorType', type);
   renderSettings();
   renderSchedule();
@@ -1255,7 +1433,7 @@ function renderSettings() {
   const anchor = getWeekAnchor();
   const currentType = getWeekType(new Date());
   const nowMonday = getMondayOf(new Date());
-  const diffWeeks = Math.round((nowMonday - anchor.monday) / (7 * 24 * 60 * 60 * 1000));
+  const diffWeeks = Math.round(daysBetween(nowMonday, anchor.monday) / 7);
 
   const numBtn = document.getElementById('anchorNumBtn');
   const denBtn = document.getElementById('anchorDenBtn');
@@ -1290,7 +1468,7 @@ function resetAllData() {
     if (k && k.startsWith('diary_')) keys.push(k);
   }
   keys.forEach(k => localStorage.removeItem(k));
-  alert('Все данные удалены. Страница сейчас перезагрузится.');
+  alert('Все данные удалены. Страница перезагрузится.');
   location.reload();
 }
 
@@ -1347,8 +1525,8 @@ function hideInstallBanner() {
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js')
-      .then(() => console.log('✅ Service Worker зарегистрирован'))
-      .catch(err => console.warn('⚠️ SW не зарегистрирован:', err));
+      .then(() => console.log('✅ SW зарегистрирован'))
+      .catch(err => console.warn('⚠️ SW:', err));
   });
 }
 
@@ -1360,6 +1538,11 @@ function updateOnlineStatus() {
 window.addEventListener('online', updateOnlineStatus);
 window.addEventListener('offline', updateOnlineStatus);
 updateOnlineStatus();
+
+// Закрытие модалки по клику на фон
+document.getElementById('editModal').addEventListener('click', (e) => {
+  if (e.target.id === 'editModal') closeEditModal();
+});
 
 // ============================================================
 // СТАРТ

@@ -7,11 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Дневник">
-<!-- CSP: запрещаем внешние скрипты, разрешаем inline для наших onclick-обработчиков -->
 <meta http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none';">
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <title>Электронный дневник</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -33,10 +33,10 @@
   .today-banner span { white-space: nowrap; }
   .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
   .tab {
-    flex: 1; min-width: 100px; padding: 12px;
+    flex: 1; min-width: 90px; padding: 12px;
     background: rgba(255,255,255,.3); color: white;
     border: none; border-radius: 10px; cursor: pointer;
-    font-size: 15px; font-weight: 600; transition: .2s;
+    font-size: 14px; font-weight: 600; transition: .2s;
   }
   .tab:hover { background: rgba(255,255,255,.45); }
   .tab.active { background: white; color: #764ba2; }
@@ -338,7 +338,6 @@
   .cal-day-lesson.cancelled .subject { text-decoration: line-through; }
   .cal-day-lesson .subject { font-weight: 700; }
   .cal-day-lesson .meta { font-size: 12px; color: #666; margin-top: 3px; }
-  /* Баннер установки PWA */
   .install-banner {
     display: none; background: white; color: #764ba2;
     padding: 12px 20px; border-radius: 10px;
@@ -356,7 +355,6 @@
     background: transparent; color: #999;
     padding: 4px 10px; font-size: 18px;
   }
-  /* Онлайн/офлайн индикатор */
   .offline-badge {
     display: none; background: #ff4757; color: white;
     padding: 6px 12px; border-radius: 8px;
@@ -368,6 +366,7 @@
     .cal-day { min-height: 60px; padding: 4px; }
     .cal-lesson-dot { font-size: 9px; padding: 1px 3px; }
     .calendar-title { font-size: 16px; }
+    .tab { font-size: 12px; min-width: 70px; padding: 10px 6px; }
   }
 </style>
 </head>
@@ -396,6 +395,7 @@
     <button class="tab" onclick="switchTab('calendar', this)">📆 Календарь</button>
     <button class="tab" onclick="switchTab('grades', this)">⭐ Оценки</button>
     <button class="tab" onclick="switchTab('homework', this)">📝 Д/З<span id="hwCounter" class="hw-counter" style="display:none">0</span></button>
+    <button class="tab" onclick="switchTab('settings', this)">⚙️ Настройки</button>
   </div>
 
   <!-- РАСПИСАНИЕ -->
@@ -497,12 +497,41 @@
     </div>
     <div id="hwList" style="margin-top:15px"></div>
   </div>
+
+  <!-- НАСТРОЙКИ -->
+  <div id="settings" class="panel">
+    <h2 style="color:#764ba2;margin-bottom:15px;font-size:18px">⚙️ Настройки</h2>
+
+    <div style="background:#faf8ff;padding:15px;border-radius:12px;margin-bottom:15px">
+      <h3 style="color:#764ba2;font-size:15px;margin-bottom:10px">🗓 Тип текущей недели</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px">
+        Укажи, какой тип у <b>текущей</b> недели. От этого зависит всё чередование:
+        следующая неделя автоматически станет противоположной.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button class="week-btn" id="anchorNumBtn" onclick="setAnchorType('numerator')" style="flex:1;min-width:140px">
+          🔵 Текущая = Числитель
+        </button>
+        <button class="week-btn" id="anchorDenBtn" onclick="setAnchorType('denominator')" style="flex:1;min-width:140px">
+          🟣 Текущая = Знаменатель
+        </button>
+      </div>
+      <div id="anchorStatus" style="font-size:13px;color:#666;padding:10px;background:white;border-radius:8px"></div>
+    </div>
+
+    <div style="background:#fff5f5;padding:15px;border-radius:12px;border-left:4px solid #ff4757">
+      <h3 style="color:#c0392b;font-size:15px;margin-bottom:10px">⚠️ Опасная зона</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px">
+        Полностью удалить все данные дневника из этого браузера. Действие необратимо.
+      </p>
+      <button class="btn" onclick="resetAllData()" style="background:#ff4757">🗑 Удалить все данные</button>
+    </div>
+  </div>
 </div>
 
 <script>
 // ============================================================
-// 🔒 БЕЗОПАСНОСТЬ: экранирование пользовательского ввода
-// Защита от XSS. Используется везде, где данные попадают в innerHTML.
+// БЕЗОПАСНОСТЬ: экранирование пользовательского ввода (XSS)
 // ============================================================
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({
@@ -512,22 +541,18 @@ function esc(s) {
 }
 
 // ============================================================
-// 🔒 Валидация данных при загрузке из localStorage
-// Защита от повреждённых/подсунутых данных.
+// Валидация данных из localStorage
 // ============================================================
 function isValidDateStr(s) {
-  if (!s) return true; // пусто — ок
+  if (!s) return true;
   if (typeof s !== 'string') return false;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
-  const d = new Date(s);
-  return !isNaN(d.getTime());
+  return !isNaN(new Date(s).getTime());
 }
-
 function isValidTimeStr(s) {
   if (!s) return true;
   return typeof s === 'string' && /^\d{2}:\d{2}$/.test(s);
 }
-
 function sanitizeLesson(l) {
   if (!l || typeof l !== 'object') return null;
   const day = DAYS.includes(l.day) ? l.day : null;
@@ -549,7 +574,6 @@ function sanitizeLesson(l) {
     status: ['attended','missed','cancelled',null].includes(l.status) ? l.status : null
   };
 }
-
 function sanitizeGrade(g) {
   if (!g || typeof g !== 'object') return null;
   if (typeof g.subject !== 'string' || !g.subject) return null;
@@ -563,7 +587,6 @@ function sanitizeGrade(g) {
     comment: typeof g.comment === 'string' ? g.comment.slice(0, 200) : ''
   };
 }
-
 function sanitizeHW(h) {
   if (!h || typeof h !== 'object') return null;
   if (typeof h.subject !== 'string' || !h.subject) return null;
@@ -578,7 +601,7 @@ function sanitizeHW(h) {
 }
 
 // ============================================================
-// Хранилище с валидацией
+// Хранилище
 // ============================================================
 const store = {
   get(key, sanitizer) {
@@ -612,23 +635,50 @@ const MONTHS = ['января','февраля','марта','апреля','м�
 const MONTHS_NOM = ['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 const WEEKDAY_SHORT = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 
-function getSemesterStart() {
-  const saved = localStorage.getItem('diary_semesterStart');
-  if (saved) {
-    const d = new Date(saved);
-    if (!isNaN(d.getTime())) return d;
+// ============================================================
+// ОПРЕДЕЛЕНИЕ НЕДЕЛИ (числитель/знаменатель)
+// Якорная логика: от понедельника-якоря считаем чётность недель.
+// По умолчанию: текущая неделя = знаменатель, следующая = числитель.
+// ============================================================
+function getMondayOf(date) {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const jsDay = d.getDay(); // Вс=0, Пн=1...
+  const diff = jsDay === 0 ? -6 : 1 - jsDay;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function getWeekAnchor() {
+  const savedDate = localStorage.getItem('diary_anchorDate');
+  const savedType = localStorage.getItem('diary_anchorType');
+  if (savedDate) {
+    const d = new Date(savedDate);
+    if (!isNaN(d.getTime())) {
+      return {
+        monday: getMondayOf(d),
+        type: savedType === 'numerator' ? 'numerator' : 'denominator'
+      };
+    }
   }
-  const now = new Date();
-  const year = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
-  return new Date(year, 8, 1);
+  const todayMonday = getMondayOf(new Date());
+  localStorage.setItem('diary_anchorDate', todayMonday.toISOString());
+  localStorage.setItem('diary_anchorType', 'denominator');
+  return { monday: todayMonday, type: 'denominator' };
 }
 
 function getWeekType(date) {
-  const start = getSemesterStart();
-  const weeks = Math.floor((date - start) / (7 * 24 * 60 * 60 * 1000));
-  return weeks % 2 === 0 ? 'numerator' : 'denominator';
+  const anchor = getWeekAnchor();
+  const targetMonday = getMondayOf(date);
+  const diffMs = targetMonday - anchor.monday;
+  const diffWeeks = Math.round(diffMs / (7 * 24 * 60 * 60 * 1000));
+  if (diffWeeks % 2 === 0) return anchor.type;
+  return anchor.type === 'numerator' ? 'denominator' : 'numerator';
 }
 
+// ============================================================
+// УТИЛИТЫ ДАТ
+// ============================================================
 function isDateInLessonPeriod(lesson, date) {
   const d = new Date(date); d.setHours(0,0,0,0);
   if (lesson.dateFrom) {
@@ -683,19 +733,21 @@ function fmtDateShort(d) {
   if (!d) return '';
   return `${String(d.getDate()).padStart(2,'0')}.${String(d.getMonth()+1).padStart(2,'0')}.${d.getFullYear()}`;
 }
-
-function getNow() {
-  const now = new Date();
-  return {
-    now,
-    timeStrSec: `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`
-  };
-}
-
 function timeToMin(t) {
   if (!t) return -1;
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
+}
+function minutesBetween(s, e) {
+  if (!s || !e) return 0;
+  return timeToMin(e) - timeToMin(s);
+}
+function fmtDuration(min) {
+  if (min <= 0) return '';
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h && m) return `${h} ч ${m} мин`;
+  if (h) return `${h} ч`;
+  return `${m} мин`;
 }
 
 function isLessonNow(lesson, date) {
@@ -707,11 +759,9 @@ function isLessonNow(lesson, date) {
   const curMin = now.getHours() * 60 + now.getMinutes();
   return curMin >= timeToMin(lesson.start) && curMin < timeToMin(lesson.end);
 }
-
 function findCurrentLesson() {
   return getLessonsForDate(new Date()).find(l => isLessonNow(l, new Date()));
 }
-
 function findNextLesson() {
   const curMin = (() => { const n = new Date(); return n.getHours()*60 + n.getMinutes(); })();
   return getLessonsForDate(new Date())
@@ -719,7 +769,7 @@ function findNextLesson() {
 }
 
 // ============================================================
-// UI
+// ВКЛАДКИ
 // ============================================================
 let currentWeekView = 'current';
 
@@ -729,16 +779,20 @@ function switchTab(name, btn) {
   (btn || event.target).closest('.tab').classList.add('active');
   document.getElementById(name).classList.add('active');
   if (name === 'calendar') renderCalendar();
+  if (name === 'settings') renderSettings();
 }
 
 function setWeekView(view) {
   currentWeekView = view;
-  document.querySelectorAll('.week-btn').forEach(b => {
+  document.querySelectorAll('.week-switcher .week-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.view === view);
   });
   renderSchedule();
 }
 
+// ============================================================
+// РАСПИСАНИЕ
+// ============================================================
 function addLesson() {
   const day = document.getElementById('sDay').value;
   const week = document.getElementById('sWeek').value;
@@ -781,19 +835,6 @@ function toggleStatus(id, status) {
   renderSchedule(); renderCalendar();
 }
 
-function minutesBetween(s, e) {
-  if (!s || !e) return 0;
-  return timeToMin(e) - timeToMin(s);
-}
-
-function fmtDuration(min) {
-  if (min <= 0) return '';
-  const h = Math.floor(min / 60), m = min % 60;
-  if (h && m) return `${h} ч ${m} мин`;
-  if (h) return `${h} ч`;
-  return `${m} мин`;
-}
-
 function lessonMatchesView(l, view) {
   if (view === 'both') return true;
   if (view === 'current') {
@@ -809,13 +850,11 @@ function weekBadge(l) {
   if (l.week === 'denominator') return '<span class="week-badge denominator">Знам.</span>';
   return '';
 }
-
 function typeBadge(l) {
   if (l.type === 'lecture') return '<span class="type-badge lecture">Лекция</span>';
   if (l.type === 'seminar') return '<span class="type-badge seminar">Семинар</span>';
   return '';
 }
-
 function periodBadge(l) {
   if (!l.dateFrom && !l.dateTo) return '';
   const from = l.dateFrom ? fmtDateShort(new Date(l.dateFrom)) : 'начала';
@@ -1172,10 +1211,67 @@ function renderHW() {
 }
 
 // ============================================================
+// НАСТРОЙКИ
+// ============================================================
+function setAnchorType(type) {
+  const monday = getMondayOf(new Date());
+  localStorage.setItem('diary_anchorDate', monday.toISOString());
+  localStorage.setItem('diary_anchorType', type);
+  renderSettings();
+  renderSchedule();
+  renderCalendar();
+  updateClock();
+}
+
+function renderSettings() {
+  const anchor = getWeekAnchor();
+  const currentType = getWeekType(new Date());
+  const nowMonday = getMondayOf(new Date());
+  const diffWeeks = Math.round((nowMonday - anchor.monday) / (7 * 24 * 60 * 60 * 1000));
+
+  const numBtn = document.getElementById('anchorNumBtn');
+  const denBtn = document.getElementById('anchorDenBtn');
+  if (numBtn) numBtn.classList.toggle('active', currentType === 'numerator');
+  if (denBtn) denBtn.classList.toggle('active', currentType === 'denominator');
+
+  const typeLabel = currentType === 'numerator' ? '🔵 Числитель' : '🟣 Знаменатель';
+  const nextWeek = new Date(nowMonday);
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextType = getWeekType(nextWeek);
+  const nextTypeLabel = nextType === 'numerator' ? '🔵 Числитель' : '🟣 Знаменатель';
+
+  const status = document.getElementById('anchorStatus');
+  if (status) {
+    status.innerHTML = `
+      <b>Сейчас:</b> ${typeLabel}<br>
+      <b>Следующая неделя:</b> ${nextTypeLabel}<br>
+      <span style="font-size:11px;color:#999;display:block;margin-top:6px">
+        Якорь: ${esc(fmtDateShort(anchor.monday))} (${anchor.type === 'numerator' ? 'числитель' : 'знаменатель'}),
+        смещение: ${diffWeeks} нед.
+      </span>
+    `;
+  }
+}
+
+function resetAllData() {
+  if (!confirm('Удалить ВСЕ данные дневника (расписание, оценки, Д/З, настройки)?')) return;
+  if (!confirm('Точно? Это необратимо!')) return;
+  const keys = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith('diary_')) keys.push(k);
+  }
+  keys.forEach(k => localStorage.removeItem(k));
+  alert('Все данные удалены. Страница сейчас перезагрузится.');
+  location.reload();
+}
+
+// ============================================================
 // ЧАСЫ
 // ============================================================
 function updateClock() {
-  const { now, timeStrSec } = getNow();
+  const now = new Date();
+  const timeStrSec = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}:${String(now.getSeconds()).padStart(2,'0')}`;
   document.getElementById('todayDate').innerHTML = `📅 <b>${esc(fmtDateFull(now))}</b>`;
   const wt = getWeekType(now);
   document.getElementById('todayWeek').innerHTML = `🗓 <b>${wt === 'numerator' ? '🔵 Числитель' : '🟣 Знаменатель'}</b>`;
@@ -1195,13 +1291,15 @@ setInterval(() => {
 }, 1000);
 
 // ============================================================
-// PWA: установка
+// PWA
 // ============================================================
 let deferredPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  document.getElementById('installBanner').classList.add('show');
+  if (!localStorage.getItem('diary_installDismissed')) {
+    document.getElementById('installBanner').classList.add('show');
+  }
 });
 
 function installPWA() {
@@ -1218,15 +1316,6 @@ function hideInstallBanner() {
   localStorage.setItem('diary_installDismissed', '1');
 }
 
-if (localStorage.getItem('diary_installDismissed')) {
-  document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('installBanner').classList.remove('show');
-  });
-}
-
-// ============================================================
-// PWA: service worker + офлайн-индикатор
-// ============================================================
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('service-worker.js')
@@ -1247,13 +1336,14 @@ updateOnlineStatus();
 // ============================================================
 // СТАРТ
 // ============================================================
-document.querySelector('.week-btn[data-view="current"]').classList.add('active');
+document.querySelector('.week-switcher .week-btn[data-view="current"]').classList.add('active');
 calInit();
 updateClock();
 renderSchedule();
 renderGrades();
 renderHW();
 renderCalendar();
+renderSettings();
 </script>
 </body>
 </html>

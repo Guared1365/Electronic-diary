@@ -401,10 +401,6 @@
     background: #e0e0e0; color: #666;
   }
   .modal .btn-cancel:hover { background: #d0d0d0; }
-  .modal .btn-warn {
-    background: #ff9800; color: white;
-  }
-  .modal .btn-warn:hover { background: #f57c00; }
   .dupe-warning {
     background: #fff3c4;
     border-left: 4px solid #ff9800;
@@ -572,6 +568,27 @@
       <div id="anchorStatus" style="font-size:13px;color:#666;padding:10px;background:white;border-radius:8px"></div>
     </div>
 
+    <div style="background:#f0f8ff;padding:15px;border-radius:12px;margin-bottom:15px;border-left:4px solid #1a5f9f">
+      <h3 style="color:#1a5f9f;font-size:15px;margin-bottom:10px">💾 Экспорт / импорт расписания</h3>
+      <p style="font-size:13px;color:#666;margin-bottom:12px">
+        Сохранить расписание в JSON-файл или загрузить из него.
+        <b>Не переносится:</b> отметки посещаемости, оценки и Д/З.
+      </p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn" onclick="exportSchedule()"
+                style="background:#1a5f9f;flex:1;min-width:130px">
+          📤 Экспорт
+        </button>
+        <button class="btn" onclick="document.getElementById('importScheduleFile').click()"
+                style="background:#1a7f1a;flex:1;min-width:130px">
+          📥 Импорт
+        </button>
+        <input type="file" id="importScheduleFile" accept=".json,application/json"
+               style="display:none" onchange="importSchedule(event)">
+      </div>
+      <div id="exportImportStatus" style="font-size:12px;color:#999;margin-top:10px;padding-left:4px"></div>
+    </div>
+
     <div style="background:#fff5f5;padding:15px;border-radius:12px;border-left:4px solid #ff4757">
       <h3 style="color:#c0392b;font-size:15px;margin-bottom:10px">⚠️ Опасная зона</h3>
       <p style="font-size:13px;color:#666;margin-bottom:12px">
@@ -723,7 +740,6 @@ function sanitizeGrade(g) {
   };
 }
 
-// Д/З теперь может содержать lessonId (связь с уроком)
 function sanitizeHW(h) {
   if (!h || typeof h !== 'object') return null;
   if (typeof h.subject !== 'string' || !h.subject) return null;
@@ -933,7 +949,7 @@ function findNextLesson() {
 // ВКЛАДКИ
 // ============================================================
 let currentWeekView = 'current';
-let highlightLessonId = null; // для перехода "к уроку" из Д/З
+let highlightLessonId = null;
 
 function switchTab(name, btn) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -945,7 +961,6 @@ function switchTab(name, btn) {
   if (name === 'settings') renderSettings();
   if (name === 'schedule') {
     renderSchedule();
-    // Прокрутка/подсветка после рендера
     if (highlightLessonId) {
       setTimeout(() => {
         const el = document.querySelector(`[data-lesson-id="${CSS.escape(String(highlightLessonId))}"]`);
@@ -1393,7 +1408,6 @@ function openHWModal(lessonId) {
   document.getElementById('hwLessonInfo').textContent =
     `К занятию: ${fmtDate(nextDate)} • ${infoParts.join(' • ')}`;
 
-  // Проверка на дубль
   updateDupeWarning(l.id, l.subject, toLocalDateStr(nextDate));
 
   document.getElementById('hwModal').classList.add('show');
@@ -1431,7 +1445,6 @@ function goToLessonFromDupe(hwId) {
   closeHWModal();
   const hw = store.get('homework', sanitizeHW).find(h => h.id === hwId);
   if (!hw) return;
-  // Переключаемся на вкладку Д/З
   const btn = Array.from(document.querySelectorAll('.tab')).find(b => b.textContent.includes('Д/З'));
   if (btn) switchTab('homework', btn);
 }
@@ -1449,7 +1462,6 @@ function saveHWFromLesson() {
   if (!subject) return alert('Введите предмет');
   if (!task) return alert('Введите текст задания');
 
-  // Проверка дубля — просим подтверждение, если уже есть
   const hwList = store.get('homework', sanitizeHW);
   const dupe = hwList.find(h =>
     !h.done &&
@@ -1557,7 +1569,6 @@ function toggleHW(id) {
   renderHW();
 }
 
-// Переход к уроку из Д/З
 function goToLesson(lessonId) {
   if (!lessonId) return;
   const data = store.get('schedule', sanitizeLesson);
@@ -1592,7 +1603,6 @@ function renderHW() {
     return;
   }
 
-  // Проверяем, какие уроки существуют (для отображения кнопки перехода)
   const schedule = store.get('schedule', sanitizeLesson);
   const lessonIds = new Set(schedule.map(l => l.id));
 
@@ -1662,6 +1672,140 @@ function renderSettings() {
       </span>
     `;
   }
+}
+
+// ============================================================
+// ЭКСПОРТ / ИМПОРТ РАСПИСАНИЯ
+// ============================================================
+function setExportImportStatus(msg, isError) {
+  const el = document.getElementById('exportImportStatus');
+  if (!el) return;
+  el.style.color = isError ? '#c0392b' : '#1a7f1a';
+  el.textContent = msg || '';
+}
+
+function exportSchedule() {
+  try {
+    const schedule = store.get('schedule', sanitizeLesson);
+    if (!schedule.length) {
+      if (!confirm('Расписание пустое. Всё равно создать файл?')) return;
+    }
+
+    // Убираем attendance — по ТЗ посещаемость не переносится
+    const cleanLessons = schedule.map(l => {
+      const { attendance, ...rest } = l;
+      return rest;
+    });
+
+    const payload = {
+      version: '1.0',
+      type: 'diary-schedule',
+      exportedAt: new Date().toISOString(),
+      count: cleanLessons.length,
+      lessons: cleanLessons
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diary-schedule-${toLocalDateStr(new Date())}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    setExportImportStatus(`✅ Экспортировано ${cleanLessons.length} уроков (без посещаемости)`);
+  } catch (e) {
+    setExportImportStatus('❌ Ошибка экспорта: ' + e.message, true);
+  }
+}
+
+function importSchedule(event) {
+  const file = event.target.files?.[0];
+  event.target.value = ''; // сброс, чтобы можно было повторно выбрать тот же файл
+  if (!file) return;
+
+  if (file.size > 5 * 1024 * 1024) {
+    setExportImportStatus('❌ Файл слишком большой (макс. 5 МБ)', true);
+    return;
+  }
+
+  setExportImportStatus('⏳ Чтение файла...');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const raw = JSON.parse(e.target.result);
+
+      let lessonsRaw;
+      if (Array.isArray(raw)) {
+        lessonsRaw = raw;
+      } else if (raw && Array.isArray(raw.lessons)) {
+        lessonsRaw = raw.lessons;
+      } else {
+        setExportImportStatus('❌ Неверный формат: ожидался массив уроков или {lessons: [...]}', true);
+        alert('Неверный формат файла.\nОжидается либо массив уроков, либо объект с полем "lessons".');
+        return;
+      }
+
+      if (!lessonsRaw.length) {
+        setExportImportStatus('⚠️ Файл не содержит уроков', true);
+        return;
+      }
+
+      const valid = lessonsRaw.map(sanitizeLesson).filter(Boolean);
+      const skipped = lessonsRaw.length - valid.length;
+
+      // Сбрасываем посещаемость — не переносим
+      valid.forEach(l => { l.attendance = {}; });
+
+      if (!valid.length) {
+        setExportImportStatus(`❌ Все ${lessonsRaw.length} записей оказались битыми`, true);
+        alert('Не удалось импортировать ни одного урока — все записи повреждены или неверного формата.');
+        return;
+      }
+
+      const current = store.get('schedule', sanitizeLesson);
+      let mode = 'replace';
+      if (current.length > 0) {
+        const summary = `Готово к импорту: ${valid.length}${skipped ? ` (пропущено битых: ${skipped})` : ''}.\n\n` +
+          `Сейчас в расписании: ${current.length} уроков.\n\n` +
+          `ОК — ЗАМЕНИТЬ текущее расписание.\n` +
+          `Отмена — ДОБАВИТЬ к текущему (дубли по id пропускаются).`;
+        mode = confirm(summary) ? 'replace' : 'add';
+      }
+
+      let finalData;
+      if (mode === 'replace') {
+        finalData = valid;
+      } else {
+        const existingIds = new Set(current.map(l => String(l.id)));
+        const toAdd = valid.filter(l => !existingIds.has(String(l.id)));
+        finalData = [...current, ...toAdd];
+        if (toAdd.length < valid.length) {
+          // Часть пропущена как дубли
+        }
+      }
+
+      store.set('schedule', finalData);
+      renderSchedule();
+      renderCalendar();
+      renderSettings();
+
+      const modeLabel = mode === 'replace' ? 'заменено' : 'добавлено';
+      setExportImportStatus(
+        `✅ Импорт завершён: ${modeLabel} ${valid.length}${skipped ? `, пропущено ${skipped}` : ''}. Всего уроков: ${finalData.length}`
+      );
+    } catch (err) {
+      setExportImportStatus('❌ Ошибка чтения файла: ' + err.message, true);
+      alert('Ошибка чтения файла: ' + err.message);
+    }
+  };
+  reader.onerror = () => {
+    setExportImportStatus('❌ Не удалось прочитать файл', true);
+  };
+  reader.readAsText(file);
 }
 
 function resetAllData() {

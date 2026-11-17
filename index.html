@@ -45,8 +45,8 @@
     box-shadow: 0 10px 30px rgba(0,0,0,.2); display: none;
   }
   .panel.active { display: block; }
-  .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
-  .row-2 { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  .row-2 { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
   input, select, textarea {
     padding: 10px; border: 2px solid #e0e0e0; border-radius: 8px;
     font-size: 14px; font-family: inherit; flex: 1; min-width: 100px;
@@ -150,6 +150,8 @@
   .lesson-row.cancelled .lesson-info .subject-name { text-decoration: line-through; color: #999; }
   .lesson-row.attended { background: #f2f9f2; }
   .lesson-row.missed { background: #fff5f0; }
+  .lesson-row.ended { opacity: .55; background: #f5f5f5; }
+  .lesson-row.ended .lesson-info .subject-name { text-decoration: line-through; color: #888; }
   .lesson-row.now {
     background: linear-gradient(90deg, #fff8e0 0%, #fffbe8 100%);
     box-shadow: inset 0 0 0 2px #ffc107;
@@ -198,6 +200,7 @@
   .status-badge.cancelled { background: #ffe0e0; color: #c0392b; }
   .status-badge.attended { background: #d4f8d4; color: #1a7f1a; }
   .status-badge.missed { background: #ffe6cc; color: #b35c00; }
+  .status-badge.ended { background: #e0e0e0; color: #666; }
   .status-badge.now { background: #ffc107; color: #5a3a00; animation: pulse-badge 1.5s infinite; }
   @keyframes pulse-badge { 0%, 100% { opacity: 1; } 50% { opacity: .6; } }
   .type-badge {
@@ -234,6 +237,8 @@
   .icon-btn.edit-btn:hover { background: #cce4ff; }
   .icon-btn.hw-btn { background: #fff3c4; color: #b8860b; }
   .icon-btn.hw-btn:hover { background: #ffe89a; }
+  .icon-btn.restore-btn { background: #d4f8d4; color: #1a7f1a; }
+  .icon-btn.restore-btn:hover { background: #a8e6a8; }
   .icon-btn.del-btn { background: transparent; color: #ff4757; font-size: 16px; font-weight: bold; }
   .icon-btn.del-btn:hover { background: #ffe0e0; }
   .icon-btn:disabled { opacity: .3; cursor: not-allowed; }
@@ -411,6 +416,52 @@
     color: #5a3a00;
   }
   .dupe-warning b { color: #b35c00; }
+  /* Архив */
+  .archive-item {
+    background: #faf8ff; border-left: 4px solid #999;
+    padding: 12px 15px; margin-bottom: 10px; border-radius: 8px;
+    display: flex; justify-content: space-between;
+    align-items: start; gap: 12px;
+  }
+  .archive-item .archive-main { flex: 1; }
+  .archive-item .archive-subject {
+    font-weight: 700; color: #333; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  }
+  .archive-item .archive-meta { font-size: 12px; color: #666; margin-bottom: 4px; }
+  .archive-item .archive-period { font-size: 12px; color: #764ba2; margin-bottom: 4px; font-weight: 600; }
+  .archive-item .archive-stats { font-size: 12px; color: #555; }
+  .archive-item .archive-actions { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; }
+  .archive-summary {
+    background: #f4f0fa; padding: 12px 15px;
+    border-radius: 10px; margin-bottom: 15px;
+    font-size: 13px; color: #764ba2; font-weight: 600;
+  }
+  /* Фильтр по дате */
+  .filter-row {
+    background: #faf8ff; padding: 10px 12px;
+    border-radius: 10px; margin: 12px 0;
+    display: flex; gap: 10px; align-items: center;
+    flex-wrap: wrap;
+  }
+  .filter-row label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: #666; cursor: pointer;
+  }
+  .filter-row input[type="date"] { flex: 1; max-width: 220px; }
+  .filter-row input[type="checkbox"] {
+    width: 18px; height: 18px; min-width: 0; flex: none;
+    cursor: pointer; accent-color: #764ba2;
+  }
+  .filter-row .ended-count {
+    color: #999; font-size: 12px; font-weight: 600;
+  }
+  .filter-btn-reset {
+    background: #ff4757; color: white;
+    border: none; padding: 8px 14px; border-radius: 8px;
+    cursor: pointer; font-weight: 700; font-size: 13px;
+  }
+  .filter-btn-reset:hover { background: #d63031; }
   @media (max-width: 600px) {
     .cal-day { min-height: 60px; padding: 4px; }
     .cal-lesson-dot { font-size: 9px; padding: 1px 3px; }
@@ -442,6 +493,7 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('schedule', this)">🗓 Расписание</button>
     <button class="tab" onclick="switchTab('calendar', this)">📆 Календарь</button>
+    <button class="tab" onclick="switchTab('archive', this)">📦 Архив</button>
     <button class="tab" onclick="switchTab('grades', this)">⭐ Оценки</button>
     <button class="tab" onclick="switchTab('homework', this)">📝 Д/З<span id="hwCounter" class="hw-counter" style="display:none">0</span></button>
     <button class="tab" onclick="switchTab('settings', this)">⚙️ Настройки</button>
@@ -483,8 +535,20 @@
       </label>
       <button class="btn" onclick="addLesson()" style="flex:1">+ Добавить</button>
     </div>
-    <div style="font-size:11px;color:#999;margin-bottom:12px;padding-left:4px">
-      💡 Пустые даты — урок действует весь семестр. Завершённые уроки (период истёк) скрываются из расписания, но остаются в календаре.
+    <div style="font-size:11px;color:#999;margin-bottom:6px;padding-left:4px">
+      💡 Пустые даты — урок действует весь семестр. Завершённые скрываются из расписания, но остаются в календаре.
+    </div>
+
+    <div class="filter-row">
+      <label style="flex:1;min-width:220px">
+        📅 Показать на дату:
+        <input id="dateFilter" type="date" onchange="onDateFilterChange()">
+      </label>
+      <button id="dateResetBtn" class="filter-btn-reset" onclick="resetDateFilter()" style="display:none">× Сбросить</button>
+      <label id="showEndedLabel">
+        <input type="checkbox" id="showEndedToggle" onchange="toggleShowEnded()">
+        Показывать завершённые <span class="ended-count" id="endedCount"></span>
+      </label>
     </div>
 
     <div id="nowBlock"></div>
@@ -505,6 +569,7 @@
       <div class="legend-item"><span class="legend-dot" style="background:#4caf50"></span> Был</div>
       <div class="legend-item"><span class="legend-dot" style="background:#ff9800"></span> Пропуск</div>
       <div class="legend-item"><span class="legend-dot" style="background:#ff4757"></span> Отменён</div>
+      <div class="legend-item"><span class="legend-dot" style="background:#bbb"></span> Завершён</div>
     </div>
   </div>
 
@@ -518,6 +583,18 @@
     </div>
     <div class="calendar-grid" id="calGrid"></div>
     <div id="calDayDetails"></div>
+  </div>
+
+  <!-- АРХИВ -->
+  <div id="archive" class="panel">
+    <h2 style="color:#764ba2;margin-bottom:15px;font-size:18px">📦 Архив завершённых занятий</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:15px">
+      Здесь собраны все занятия, у которых истёк период действия. Их можно отредактировать,
+      восстановить (убрать дату окончания) или удалить. В расписании они не показываются,
+      но в календаре на прошедших датах видны.
+    </p>
+    <div id="archiveSummary" class="archive-summary" style="display:none"></div>
+    <div id="archiveView"></div>
   </div>
 
   <!-- ОЦЕНКИ -->
@@ -842,12 +919,60 @@ function isDateInLessonPeriod(lesson, date) {
   return true;
 }
 
-// Урок завершён, если у него задана dateTo и эта дата строго раньше сегодняшней
 function isLessonEnded(lesson) {
   if (!lesson.dateTo) return false;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const to = parseLocalDate(lesson.dateTo);
   return to ? to < today : false;
+}
+
+// Считаем, сколько раз урок фактически проводился в своём периоде
+function countLessonOccurrences(lesson) {
+  if (!lesson.dateTo) return 0;
+  const to = parseLocalDate(lesson.dateTo);
+  if (!to) return 0;
+
+  let from;
+  if (lesson.dateFrom) {
+    from = parseLocalDate(lesson.dateFrom);
+  } else {
+    from = new Date(to);
+    from.setDate(from.getDate() - 180);
+  }
+  if (!from) return 0;
+
+  const dayIdx = DAYS.indexOf(lesson.day);
+  if (dayIdx === -1) return 0;
+  const jsTargetDay = dayIdx + 1;
+
+  let count = 0;
+  const cur = new Date(from);
+  cur.setHours(0,0,0,0);
+  const end = new Date(to);
+  end.setHours(0,0,0,0);
+
+  while (cur <= end) {
+    if (cur.getDay() === jsTargetDay) {
+      const wt = getWeekType(cur);
+      if (lesson.week === 'both' || lesson.week === wt) {
+        count++;
+      }
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
+function getLessonAttendanceStats(lesson) {
+  const att = lesson.attendance || {};
+  const stats = { attended: 0, missed: 0, cancelled: 0, marked: 0 };
+  Object.values(att).forEach(v => {
+    if (v === 'attended') stats.attended++;
+    else if (v === 'missed') stats.missed++;
+    else if (v === 'cancelled') stats.cancelled++;
+    stats.marked++;
+  });
+  return stats;
 }
 
 function getLessonsForDate(date) {
@@ -933,9 +1058,11 @@ function findNextLesson() {
 }
 
 // ============================================================
-// ВКЛАДКИ
+// СОСТОЯНИЕ
 // ============================================================
 let currentWeekView = 'current';
+let viewDate = null; // null или Date для фильтра по дате
+let showEndedLessons = localStorage.getItem('diary_showEnded') === '1';
 let highlightLessonId = null;
 
 function switchTab(name, btn) {
@@ -946,6 +1073,7 @@ function switchTab(name, btn) {
   document.getElementById(name).classList.add('active');
   if (name === 'calendar') renderCalendar();
   if (name === 'settings') renderSettings();
+  if (name === 'archive') renderArchive();
   if (name === 'schedule') {
     renderSchedule();
     if (highlightLessonId) {
@@ -968,6 +1096,47 @@ function setWeekView(view) {
     b.classList.toggle('active', b.dataset.view === view);
   });
   renderSchedule();
+}
+
+// ============================================================
+// ФИЛЬТР ПО ДАТЕ + ТУМБЛЕР ЗАВЕРШЁННЫХ
+// ============================================================
+function onDateFilterChange() {
+  const val = document.getElementById('dateFilter').value;
+  viewDate = val ? parseLocalDate(val) : null;
+  updateScheduleUI();
+  renderSchedule();
+}
+
+function resetDateFilter() {
+  viewDate = null;
+  document.getElementById('dateFilter').value = '';
+  updateScheduleUI();
+  renderSchedule();
+}
+
+function toggleShowEnded() {
+  showEndedLessons = document.getElementById('showEndedToggle').checked;
+  localStorage.setItem('diary_showEnded', showEndedLessons ? '1' : '0');
+  renderSchedule();
+}
+
+function updateScheduleUI() {
+  const weekSwitcher = document.querySelector('#schedule .week-switcher');
+  const dateResetBtn = document.getElementById('dateResetBtn');
+  const showEndedLabel = document.getElementById('showEndedLabel');
+  const nowBlock = document.getElementById('nowBlock');
+  if (viewDate) {
+    if (weekSwitcher) weekSwitcher.style.display = 'none';
+    if (dateResetBtn) dateResetBtn.style.display = 'inline-block';
+    if (showEndedLabel) showEndedLabel.style.display = 'none';
+    if (nowBlock) nowBlock.style.display = 'none';
+  } else {
+    if (weekSwitcher) weekSwitcher.style.display = 'flex';
+    if (dateResetBtn) dateResetBtn.style.display = 'none';
+    if (showEndedLabel) showEndedLabel.style.display = 'flex';
+    if (nowBlock) nowBlock.style.display = '';
+  }
 }
 
 // ============================================================
@@ -997,7 +1166,7 @@ function addLesson() {
   ['sNum','sSubject','sRoom','sTeacher','sStart','sEnd','sDateFrom','sDateTo'].forEach(id => {
     document.getElementById(id).value = '';
   });
-  renderSchedule(); renderCalendar();
+  renderSchedule(); renderCalendar(); renderArchive();
 }
 
 function openEditModal(id) {
@@ -1052,13 +1221,23 @@ function saveEditedLesson() {
   };
   store.set('schedule', data);
   closeEditModal();
-  renderSchedule(); renderCalendar();
+  renderSchedule(); renderCalendar(); renderArchive();
 }
 
 function delLesson(id) {
   if (!confirm('Удалить этот урок? Все отметки посещаемости тоже удалятся.')) return;
   store.set('schedule', store.get('schedule', sanitizeLesson).filter(x => x.id !== id));
-  renderSchedule(); renderCalendar();
+  renderSchedule(); renderCalendar(); renderArchive();
+}
+
+function restoreLesson(id) {
+  const data = store.get('schedule', sanitizeLesson);
+  const idx = data.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  if (!confirm('Убрать дату окончания? Урок снова появится в расписании и продолжит действовать.')) return;
+  data[idx].dateTo = null;
+  store.set('schedule', data);
+  renderSchedule(); renderCalendar(); renderArchive();
 }
 
 function toggleStatus(id, status, dateStr) {
@@ -1072,7 +1251,7 @@ function toggleStatus(id, status, dateStr) {
     item.attendance[dateStr] = status;
   }
   store.set('schedule', data);
-  renderSchedule(); renderCalendar();
+  renderSchedule(); renderCalendar(); renderArchive();
 }
 
 function lessonMatchesView(l, view) {
@@ -1102,7 +1281,90 @@ function periodBadge(l) {
   return `<span class="period-badge">🗓 ${esc(from)} — ${esc(to)}</span>`;
 }
 
+// Универсальный рендер строки урока
+function renderLessonRow(l, targetDate, opts = {}) {
+  const isEnded = !!opts.isEnded;
+  const showDateBadge = opts.showDateBadge !== false;
+  const showWeekBadge = !!opts.showWeekBadge;
+
+  const dateStr = targetDate ? toLocalDateStr(targetDate) : null;
+  const att = dateStr ? l.attendance?.[dateStr] : null;
+  const isNow = !isEnded && isLessonNow(l, targetDate);
+  const dur = minutesBetween(l.start, l.end);
+
+  const rowClass = [
+    att || '',
+    l.type ? 'type-' + l.type : '',
+    isNow ? 'now' : '',
+    isEnded ? 'ended' : ''
+  ].filter(Boolean).join(' ');
+
+  let statusBadge = '';
+  if (isEnded) {
+    statusBadge = '<span class="status-badge ended">🏁 ЗАВЕРШЁН</span>';
+  } else if (isNow) {
+    statusBadge = '<span class="status-badge now">▶ ИДЁТ СЕЙЧАС</span>';
+  } else if (att === 'cancelled') {
+    statusBadge = '<span class="status-badge cancelled">ОТМЕНЁН</span>';
+  } else if (att === 'attended') {
+    statusBadge = '<span class="status-badge attended">БЫЛ</span>';
+  } else if (att === 'missed') {
+    statusBadge = '<span class="status-badge missed">ПРОПУСК</span>';
+  }
+
+  const metaParts = [];
+  if (l.room) metaParts.push(`<span>🚪 ${esc(l.room)}</span>`);
+  if (l.teacher) metaParts.push(`<span>👤 ${esc(l.teacher)}</span>`);
+
+  // Кнопки
+  const disabled = !dateStr || isEnded ? 'disabled' : '';
+  const toggleArgs = dateStr ? `'${esc(String(l.id))}', STATUS, '${dateStr}'` : '';
+
+  let dateBadgeHtml = '';
+  if (showDateBadge) {
+    if (targetDate) {
+      dateBadgeHtml = `<span class="date-badge">📅 ${esc(fmtDate(targetDate))}</span>`;
+    } else if (isEnded) {
+      dateBadgeHtml = `<span class="date-badge" style="background:#e0e0e0;color:#666">🏁 завершён</span>`;
+    } else {
+      dateBadgeHtml = `<span class="date-badge" style="background:#ffe0e0;color:#c0392b">⛔ вне периода</span>`;
+    }
+  }
+
+  return `<div class="lesson-row ${rowClass}" data-lesson-id="${esc(String(l.id))}">
+    <div class="lesson-info">
+      <strong>${esc(l.num ? l.num + '.' : '•')}</strong>
+      <span class="subject-name">${esc(l.subject)}</span>
+      ${typeBadge(l)}
+      ${showWeekBadge ? weekBadge(l) : ''}
+      ${dateBadgeHtml}
+      ${periodBadge(l)}
+      ${(l.start || l.end) ? `<span class="time-badge">${esc(l.start || '?')} – ${esc(l.end || '?')}</span>` : ''}
+      ${dur > 0 && att !== 'cancelled' ? `<span class="duration-badge">${esc(fmtDuration(dur))}</span>` : ''}
+      ${statusBadge}
+      ${metaParts.length ? `<div class="lesson-meta">${metaParts.join('')}</div>` : ''}
+    </div>
+    <div class="lesson-actions">
+      <button class="icon-btn attend ${att === 'attended' ? 'active' : ''}" ${disabled}
+              onclick="toggleStatus(${toggleArgs.replace('STATUS', "'attended'")})" title="Присутствовал">✓</button>
+      <button class="icon-btn miss ${att === 'missed' ? 'active' : ''}" ${disabled}
+              onclick="toggleStatus(${toggleArgs.replace('STATUS', "'missed'")})" title="Пропустил">✗</button>
+      <button class="icon-btn cancel ${att === 'cancelled' ? 'active' : ''}" ${disabled}
+              onclick="toggleStatus(${toggleArgs.replace('STATUS', "'cancelled'")})" title="Отменён">🚫</button>
+      <button class="icon-btn hw-btn" ${disabled}
+              onclick="openHWModal('${esc(String(l.id))}')" title="Добавить Д/З">📝</button>
+      <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
+      <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
+    </div>
+  </div>`;
+}
+
 function renderSchedule() {
+  if (viewDate) {
+    renderSingleDayView(viewDate);
+    return;
+  }
+
   const data = store.get('schedule', sanitizeLesson);
   const view = document.getElementById('scheduleView');
   const isBothMode = currentWeekView === 'both';
@@ -1110,15 +1372,22 @@ function renderSchedule() {
   const jsDay = today.getDay();
   const todayIdx = jsDay === 0 ? -1 : jsDay - 1;
 
-  // Полный набор для текущего режима (до фильтра по "завершённости")
+  // Обновляем счётчик завершённых в тумблере
+  const endedCountEl = document.getElementById('endedCount');
+  if (endedCountEl) {
+    const totalEnded = data.filter(l => isLessonEnded(l)).length;
+    endedCountEl.textContent = totalEnded > 0 ? `(${totalEnded})` : '';
+  }
+
   const matchedByView = data.filter(l => lessonMatchesView(l, currentWeekView));
-  // Видимые: только незавершённые
-  const visibleData = matchedByView.filter(l => !isLessonEnded(l));
+  const visibleData = showEndedLessons
+    ? matchedByView
+    : matchedByView.filter(l => !isLessonEnded(l));
 
   if (!visibleData.length) {
     const anyEnded = matchedByView.some(l => isLessonEnded(l));
     const emptyMsg = anyEnded
-      ? 'Все занятия в этом режиме уже завершены. Прошедшие пары смотри в календаре 📆'
+      ? 'Все занятия в этом режиме завершены. Включи «Показывать завершённые», открой 📦 Архив или 📆 Календарь.'
       : 'Расписание пустое 👆';
     view.innerHTML = `<div class="empty">${emptyMsg}</div>`;
     renderNowBlock();
@@ -1133,6 +1402,7 @@ function renderSchedule() {
     const todayStr = toLocalDateStr(new Date());
 
     const totalMin = lessons.reduce((s, l) => {
+      if (isLessonEnded(l)) return s;
       const att = isToday ? l.attendance?.[todayStr] : null;
       if (att === 'cancelled') return s;
       return s + minutesBetween(l.start, l.end);
@@ -1149,56 +1419,13 @@ function renderSchedule() {
       </div>
       <div class="day-content">
         ${lessons.map(l => {
-          const dur = minutesBetween(l.start, l.end);
-          const nextDate = getNextLessonDate(l);
-          const dateStr = nextDate ? toLocalDateStr(nextDate) : null;
-          const att = dateStr ? l.attendance?.[dateStr] : null;
-          const isNow = isLessonNow(l, nextDate);
-          const rowClass = [
-            att || '',
-            l.type ? 'type-' + l.type : '',
-            isNow ? 'now' : ''
-          ].filter(Boolean).join(' ');
-
-          let statusBadge = '';
-          if (isNow) statusBadge = '<span class="status-badge now">▶ ИДЁТ СЕЙЧАС</span>';
-          else if (att === 'cancelled') statusBadge = '<span class="status-badge cancelled">ОТМЕНЁН</span>';
-          else if (att === 'attended') statusBadge = '<span class="status-badge attended">БЫЛ</span>';
-          else if (att === 'missed') statusBadge = '<span class="status-badge missed">ПРОПУСК</span>';
-
-          const metaParts = [];
-          if (l.room) metaParts.push(`<span>🚪 ${esc(l.room)}</span>`);
-          if (l.teacher) metaParts.push(`<span>👤 ${esc(l.teacher)}</span>`);
-
-          const disabled = !dateStr ? 'disabled' : '';
-          const toggleArgs = dateStr ? `'${esc(String(l.id))}', STATUS, '${dateStr}'` : '';
-
-          return `<div class="lesson-row ${rowClass}" data-lesson-id="${esc(String(l.id))}">
-            <div class="lesson-info">
-              <strong>${esc(l.num ? l.num + '.' : '•')}</strong>
-              <span class="subject-name">${esc(l.subject)}</span>
-              ${typeBadge(l)}
-              ${isBothMode ? weekBadge(l) : ''}
-              ${nextDate ? `<span class="date-badge">📅 ${esc(fmtDate(nextDate))}</span>` : ''}
-              ${periodBadge(l)}
-              ${(l.start || l.end) ? `<span class="time-badge">${esc(l.start || '?')} – ${esc(l.end || '?')}</span>` : ''}
-              ${dur > 0 && att !== 'cancelled' ? `<span class="duration-badge">${esc(fmtDuration(dur))}</span>` : ''}
-              ${statusBadge}
-              ${metaParts.length ? `<div class="lesson-meta">${metaParts.join('')}</div>` : ''}
-            </div>
-            <div class="lesson-actions">
-              <button class="icon-btn attend ${att === 'attended' ? 'active' : ''}" ${disabled}
-                      onclick="toggleStatus(${toggleArgs.replace('STATUS', "'attended'")})" title="Присутствовал">✓</button>
-              <button class="icon-btn miss ${att === 'missed' ? 'active' : ''}" ${disabled}
-                      onclick="toggleStatus(${toggleArgs.replace('STATUS', "'missed'")})" title="Пропустил">✗</button>
-              <button class="icon-btn cancel ${att === 'cancelled' ? 'active' : ''}" ${disabled}
-                      onclick="toggleStatus(${toggleArgs.replace('STATUS', "'cancelled'")})" title="Отменён">🚫</button>
-              <button class="icon-btn hw-btn" ${disabled}
-                      onclick="openHWModal('${esc(String(l.id))}')" title="Добавить Д/З">📝</button>
-              <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
-              <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
-            </div>
-          </div>`;
+          const ended = isLessonEnded(l);
+          const targetDate = ended ? null : getNextLessonDate(l);
+          return renderLessonRow(l, targetDate, {
+            isEnded: ended,
+            showDateBadge: true,
+            showWeekBadge: isBothMode
+          });
         }).join('')}
       </div>
     </div>`;
@@ -1207,8 +1434,51 @@ function renderSchedule() {
   renderNowBlock();
 }
 
+function renderSingleDayView(date) {
+  const view = document.getElementById('scheduleView');
+  const lessons = getLessonsForDate(date);
+  const wt = getWeekType(date);
+  const wtLabel = wt === 'numerator' ? '🔵 Числитель' : '🟣 Знаменатель';
+  const dateStr = toLocalDateStr(date);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const isToday = date.getTime() === today.getTime();
+
+  if (!lessons.length) {
+    view.innerHTML = `<div class="day-block">
+      <div class="day-title ${isToday ? 'today' : ''}">
+        <span>${esc(fmtDateFull(date))} • ${esc(wtLabel)}${isToday ? '<span class="today-tag">СЕГОДНЯ</span>' : ''}</span>
+      </div>
+      <div class="day-content">
+        <div class="empty">В этот день занятий нет 🎉</div>
+      </div>
+    </div>`;
+    return;
+  }
+
+  const totalMin = lessons.reduce((s, l) => {
+    const att = isToday ? l.attendance?.[dateStr] : null;
+    if (att === 'cancelled') return s;
+    return s + minutesBetween(l.start, l.end);
+  }, 0);
+  const totalStr = fmtDuration(totalMin);
+
+  view.innerHTML = `<div class="day-block">
+    <div class="day-title ${isToday ? 'today' : ''}">
+      <span>${esc(fmtDateFull(date))} • ${esc(wtLabel)}${isToday ? '<span class="today-tag">СЕГОДНЯ</span>' : ''}</span>
+      ${totalStr ? `<span class="duration">⏱ ${esc(totalStr)}</span>` : ''}
+    </div>
+    <div class="day-content">
+      ${lessons.map(l => renderLessonRow(l, date, {
+        showDateBadge: false,
+        showWeekBadge: false
+      })).join('')}
+    </div>
+  </div>`;
+}
+
 function renderNowBlock() {
   const block = document.getElementById('nowBlock');
+  if (!block) return;
   const current = findCurrentLesson();
   const next = findNextLesson();
 
@@ -1243,6 +1513,85 @@ function renderNowBlock() {
     return;
   }
   block.innerHTML = '';
+}
+
+// ============================================================
+// АРХИВ
+// ============================================================
+function renderArchive() {
+  const data = store.get('schedule', sanitizeLesson);
+  const ended = data.filter(l => isLessonEnded(l));
+  const summary = document.getElementById('archiveSummary');
+  const view = document.getElementById('archiveView');
+
+  if (!ended.length) {
+    if (summary) summary.style.display = 'none';
+    view.innerHTML = '<div class="empty">Архив пуст. Завершённые занятия появятся здесь, когда истечёт их период действия.</div>';
+    return;
+  }
+
+  // Общая сводка
+  let totalOccurrences = 0;
+  let totalAttended = 0, totalMissed = 0, totalCancelled = 0;
+  ended.forEach(l => {
+    totalOccurrences += countLessonOccurrences(l);
+    const s = getLessonAttendanceStats(l);
+    totalAttended += s.attended;
+    totalMissed += s.missed;
+    totalCancelled += s.cancelled;
+  });
+
+  if (summary) {
+    summary.style.display = 'block';
+    summary.innerHTML = `
+      Всего в архиве: <b>${ended.length}</b> ${ended.length === 1 ? 'занятие' : 'занятий'}
+      • Проведено пар: <b>${totalOccurrences}</b>
+      • ✅ Был: <b>${totalAttended}</b>
+      • ❌ Пропуск: <b>${totalMissed}</b>
+      • 🚫 Отменено: <b>${totalCancelled}</b>
+    `;
+  }
+
+  // Сортируем по дате окончания (сначала недавние)
+  ended.sort((a, b) => (b.dateTo || '').localeCompare(a.dateTo || ''));
+
+  view.innerHTML = ended.map(l => {
+    const stats = getLessonAttendanceStats(l);
+    const occurrences = countLessonOccurrences(l);
+    const fromStr = l.dateFrom ? fmtDateShort(parseLocalDate(l.dateFrom)) : '—';
+    const toStr = l.dateTo ? fmtDateShort(parseLocalDate(l.dateTo)) : '—';
+    const weekLabel = l.week === 'both' ? 'каждую неделю'
+      : l.week === 'numerator' ? 'числитель' : 'знаменатель';
+
+    const metaParts = [];
+    if (l.teacher) metaParts.push(`👤 ${esc(l.teacher)}`);
+    if (l.room) metaParts.push(`🚪 ${esc(l.room)}`);
+    if (l.start) metaParts.push(`🕐 ${esc(l.start)}–${esc(l.end || '?')}`);
+
+    return `<div class="archive-item">
+      <div class="archive-main">
+        <div class="archive-subject">
+          <b>${esc(l.num ? l.num + '. ' : '')}${esc(l.subject)}</b>
+          ${typeBadge(l)}
+        </div>
+        <div class="archive-meta">${metaParts.join(' • ') || '—'}</div>
+        <div class="archive-period">
+          📅 ${esc(fromStr)} — ${esc(toStr)} • ${esc(l.day)} • ${esc(weekLabel)}
+        </div>
+        <div class="archive-stats">
+          Всего: <b>${occurrences}</b>
+          • ✅ Был: <b>${stats.attended}</b>
+          • ❌ Пропуск: <b>${stats.missed}</b>
+          • 🚫 Отменено: <b>${stats.cancelled}</b>
+        </div>
+      </div>
+      <div class="archive-actions">
+        <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
+        <button class="icon-btn restore-btn" onclick="restoreLesson('${esc(String(l.id))}')" title="Восстановить (убрать дату окончания)">♻️</button>
+        <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 // ============================================================
@@ -1636,6 +1985,7 @@ function setAnchorType(type) {
   renderSettings();
   renderSchedule();
   renderCalendar();
+  renderArchive();
   updateClock();
 }
 
@@ -1703,6 +2053,7 @@ setInterval(() => {
     renderSchedule();
     renderHW();
     if (document.getElementById('calendar').classList.contains('active')) renderCalendar();
+    if (document.getElementById('archive').classList.contains('active')) renderArchive();
   }
 }, 1000);
 
@@ -1760,12 +2111,16 @@ document.getElementById('hwModal').addEventListener('click', (e) => {
 // СТАРТ
 // ============================================================
 document.querySelector('.week-switcher .week-btn[data-view="current"]').classList.add('active');
+const showEndedToggleEl = document.getElementById('showEndedToggle');
+if (showEndedToggleEl) showEndedToggleEl.checked = showEndedLessons;
 calInit();
 updateClock();
+updateScheduleUI();
 renderSchedule();
 renderGrades();
 renderHW();
 renderCalendar();
+renderArchive();
 renderSettings();
 </script>
 </body>

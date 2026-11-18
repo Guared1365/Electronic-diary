@@ -146,6 +146,7 @@
   .lesson-row:last-child { border-bottom: none; }
   .lesson-row.type-lecture { border-left-color: #4caf50; }
   .lesson-row.type-seminar { border-left-color: #ff9800; }
+  .lesson-row.single-lesson { background: #fffbe8; }
   .lesson-row.cancelled { background: #fff5f5; opacity: .7; }
   .lesson-row.cancelled .lesson-info .subject-name { text-decoration: line-through; color: #999; }
   .lesson-row.attended { background: #f2f9f2; }
@@ -185,6 +186,11 @@
   }
   .lesson-row .period-badge {
     background: #e8f8e8; color: #1a7f1a;
+    padding: 3px 10px; border-radius: 20px;
+    font-size: 11px; font-weight: 700; white-space: nowrap;
+  }
+  .lesson-row .single-badge {
+    background: #fff3c4; color: #b8860b;
     padding: 3px 10px; border-radius: 20px;
     font-size: 11px; font-weight: 700; white-space: nowrap;
   }
@@ -237,6 +243,8 @@
   .icon-btn.edit-btn:hover { background: #cce4ff; }
   .icon-btn.hw-btn { background: #fff3c4; color: #b8860b; }
   .icon-btn.hw-btn:hover { background: #ffe89a; }
+  .icon-btn.archive-btn { background: #e0e0e0; color: #666; }
+  .icon-btn.archive-btn:hover { background: #d0d0d0; }
   .icon-btn.restore-btn { background: #d4f8d4; color: #1a7f1a; }
   .icon-btn.restore-btn:hover { background: #a8e6a8; }
   .icon-btn.del-btn { background: transparent; color: #ff4757; font-size: 16px; font-weight: bold; }
@@ -416,7 +424,23 @@
     color: #5a3a00;
   }
   .dupe-warning b { color: #b35c00; }
-  /* Архив */
+  .single-hint {
+    background: #fffbe8;
+    border: 1px dashed #ffc107;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: #b8860b;
+  }
+  .single-hint label {
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer;
+  }
+  .single-hint input[type="date"] {
+    flex: 1;
+    border-color: #ffc107;
+  }
   .archive-item {
     background: #faf8ff; border-left: 4px solid #999;
     padding: 12px 15px; margin-bottom: 10px; border-radius: 8px;
@@ -437,7 +461,6 @@
     border-radius: 10px; margin-bottom: 15px;
     font-size: 13px; color: #764ba2; font-weight: 600;
   }
-  /* Фильтр по дате */
   .filter-row {
     background: #faf8ff; padding: 10px 12px;
     border-radius: 10px; margin: 12px 0;
@@ -533,11 +556,19 @@
       <label style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#666">
         по: <input id="sDateTo" type="date" style="flex:1">
       </label>
-      <button class="btn" onclick="addLesson()" style="flex:1">+ Добавить</button>
     </div>
-    <div style="font-size:11px;color:#999;margin-bottom:6px;padding-left:4px">
-      💡 Пустые даты — урок действует весь семестр. Завершённые скрываются из расписания, но остаются в календаре.
+
+    <div class="single-hint">
+      <label>
+        📌 <b>Или дата единичного урока</b> (опционально):
+        <input id="sSpecificDate" type="date">
+      </label>
+      <div style="font-size:11px;margin-top:6px;color:#a07000">
+        Если указана дата — урок появится только в этот день. Поля «день недели», «тип недели» и «период» игнорируются.
+      </div>
     </div>
+
+    <button class="btn" onclick="addLesson()" style="width:100%">+ Добавить урок</button>
 
     <div class="filter-row">
       <label style="flex:1;min-width:220px">
@@ -589,9 +620,8 @@
   <div id="archive" class="panel">
     <h2 style="color:#764ba2;margin-bottom:15px;font-size:18px">📦 Архив завершённых занятий</h2>
     <p style="font-size:13px;color:#666;margin-bottom:15px">
-      Здесь собраны все занятия, у которых истёк период действия. Их можно отредактировать,
-      восстановить (убрать дату окончания) или удалить. В расписании они не показываются,
-      но в календаре на прошедших датах видны.
+      Здесь собраны все занятия, которые вы отправили в архив или у которых истёк период действия.
+      Их можно отредактировать, восстановить или удалить.
     </p>
     <div id="archiveSummary" class="archive-summary" style="display:none"></div>
     <div id="archiveView"></div>
@@ -631,8 +661,7 @@
     <div style="background:#faf8ff;padding:15px;border-radius:12px;margin-bottom:15px">
       <h3 style="color:#764ba2;font-size:15px;margin-bottom:10px">🗓 Тип текущей недели</h3>
       <p style="font-size:13px;color:#666;margin-bottom:12px">
-        Укажи, какой тип у <b>текущей</b> недели. От этого зависит всё чередование:
-        следующая неделя автоматически станет противоположной.
+        Укажи, какой тип у <b>текущей</b> недели. От этого зависит всё чередование.
       </p>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <button class="week-btn" id="anchorNumBtn" onclick="setAnchorType('numerator')" style="flex:1;min-width:140px">
@@ -660,7 +689,8 @@
   <div class="modal">
     <h2>✏️ Редактировать урок</h2>
     <input type="hidden" id="editId">
-    <div class="row">
+
+    <div class="row" id="eRegularFields">
       <select id="eDay" style="flex:1.2">
         <option>Понедельник</option><option>Вторник</option><option>Среда</option>
         <option>Четверг</option><option>Пятница</option><option>Суббота</option>
@@ -670,6 +700,16 @@
         <option value="numerator">Числитель (I)</option>
         <option value="denominator">Знаменатель (II)</option>
       </select>
+    </div>
+
+    <div class="single-hint" id="eSingleDateRow" style="display:none">
+      <label>
+        📌 <b>Дата единичного урока</b>:
+        <input id="eSingleDate" type="date">
+      </label>
+    </div>
+
+    <div class="row">
       <select id="eType" style="flex:1">
         <option value="lecture">🟢 Лекция</option>
         <option value="seminar">🟠 Семинар</option>
@@ -685,7 +725,7 @@
       <input id="eStart" type="time" title="Начало">
       <input id="eEnd" type="time" title="Конец">
     </div>
-    <div class="row-2">
+    <div class="row-2" id="ePeriodRow">
       <label style="flex:1;display:flex;align-items:center;gap:8px;font-size:13px;color:#666">
         Действует с: <input id="eDateFrom" type="date" style="flex:1">
       </label>
@@ -700,7 +740,7 @@
   </div>
 </div>
 
-<!-- МОДАЛКА ДОБАВЛЕНИЯ Д/З ИЗ УРОКА -->
+<!-- МОДАЛКА Д/З -->
 <div class="modal-overlay" id="hwModal">
   <div class="modal">
     <h2>📝 Добавить домашнее задание</h2>
@@ -765,6 +805,8 @@ function sanitizeLesson(l) {
   const day = DAYS.includes(l.day) ? l.day : null;
   if (!day) return null;
   if (typeof l.subject !== 'string' || !l.subject) return null;
+  const single = !!l.single;
+  const specificDate = single && isValidDateStr(l.specificDate) && l.specificDate ? l.specificDate : null;
   return {
     id: typeof l.id === 'number' || typeof l.id === 'string' ? l.id : crypto.randomUUID(),
     day,
@@ -778,6 +820,9 @@ function sanitizeLesson(l) {
     end: isValidTimeStr(l.end) ? l.end : '',
     dateFrom: isValidDateStr(l.dateFrom) ? l.dateFrom : null,
     dateTo: isValidDateStr(l.dateTo) ? l.dateTo : null,
+    single,
+    specificDate,
+    archived: !!l.archived,
     attendance: sanitizeAttendance(l.attendance)
   };
 }
@@ -908,6 +953,11 @@ function getWeekType(date) {
 // ============================================================
 function isDateInLessonPeriod(lesson, date) {
   const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  if (lesson.single && lesson.specificDate) {
+    const specific = parseLocalDate(lesson.specificDate);
+    if (!specific) return false;
+    return d.getTime() === specific.getTime();
+  }
   if (lesson.dateFrom) {
     const from = parseLocalDate(lesson.dateFrom);
     if (from && d < from) return false;
@@ -920,14 +970,22 @@ function isDateInLessonPeriod(lesson, date) {
 }
 
 function isLessonEnded(lesson) {
-  if (!lesson.dateTo) return false;
+  if (lesson.archived) return true;
   const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (lesson.single && lesson.specificDate) {
+    const specific = parseLocalDate(lesson.specificDate);
+    return specific ? specific < today : true;
+  }
+  if (!lesson.dateTo) return false;
   const to = parseLocalDate(lesson.dateTo);
   return to ? to < today : false;
 }
 
-// Считаем, сколько раз урок фактически проводился в своём периоде
 function countLessonOccurrences(lesson) {
+  if (lesson.single && lesson.specificDate) {
+    const att = lesson.attendance?.[lesson.specificDate];
+    return att === 'cancelled' ? 0 : 1;
+  }
   if (!lesson.dateTo) return 0;
   const to = parseLocalDate(lesson.dateTo);
   if (!to) return 0;
@@ -991,6 +1049,11 @@ function getLessonsForDate(date) {
 
 function getNextLessonDate(lesson) {
   const today = new Date(); today.setHours(0,0,0,0);
+  if (lesson.single && lesson.specificDate) {
+    const specific = parseLocalDate(lesson.specificDate);
+    if (!specific) return null;
+    return specific >= today ? specific : null;
+  }
   const targetDayIdx = DAYS.indexOf(lesson.day);
   if (targetDayIdx === -1) return null;
   const jsTargetDay = targetDayIdx + 1;
@@ -1000,6 +1063,7 @@ function getNextLessonDate(lesson) {
     if (d.getDay() === jsTargetDay) {
       const wt = getWeekType(d);
       if ((lesson.week === 'both' || lesson.week === wt)
+          && isDateInLessonPeriod(l => true, d) // isDateInLessonPeriod(lesson, d)
           && isDateInLessonPeriod(lesson, d)) {
         return d;
       }
@@ -1061,7 +1125,7 @@ function findNextLesson() {
 // СОСТОЯНИЕ
 // ============================================================
 let currentWeekView = 'current';
-let viewDate = null; // null или Date для фильтра по дате
+let viewDate = null;
 let showEndedLessons = localStorage.getItem('diary_showEnded') === '1';
 let highlightLessonId = null;
 
@@ -1099,7 +1163,7 @@ function setWeekView(view) {
 }
 
 // ============================================================
-// ФИЛЬТР ПО ДАТЕ + ТУМБЛЕР ЗАВЕРШЁННЫХ
+// ФИЛЬТР ПО ДАТЕ + ТУМБЛЕР
 // ============================================================
 function onDateFilterChange() {
   const val = document.getElementById('dateFilter').value;
@@ -1154,16 +1218,39 @@ function addLesson() {
   const end = document.getElementById('sEnd').value;
   const dateFrom = document.getElementById('sDateFrom').value;
   const dateTo = document.getElementById('sDateTo').value;
+  const specificDate = document.getElementById('sSpecificDate').value;
+
   if (!subject) return alert('Введите предмет');
   if (start && end && end <= start) return alert('Конец должен быть позже начала');
-  if (dateFrom && dateTo && dateTo < dateFrom) return alert('Дата «по» должна быть позже «с»');
+
   const data = store.get('schedule', sanitizeLesson);
-  data.push({
-    id: crypto.randomUUID(), day, week, type, num, subject, room, teacher,
-    start, end, dateFrom: dateFrom || null, dateTo: dateTo || null, attendance: {}
-  });
+
+  if (specificDate) {
+    const d = parseLocalDate(specificDate);
+    if (!d) return alert('Некорректная дата единичного урока');
+    if (d.getDay() === 0) return alert('Воскресенье не может быть днём урока');
+    const dayFromDate = DAYS[d.getDay() - 1];
+    data.push({
+      id: crypto.randomUUID(),
+      day: dayFromDate,
+      week: 'both',
+      type, num, subject, room, teacher, start, end,
+      dateFrom: null, dateTo: null,
+      single: true, specificDate,
+      archived: false,
+      attendance: {}
+    });
+  } else {
+    if (dateFrom && dateTo && dateTo < dateFrom) return alert('Дата «по» должна быть позже «с»');
+    data.push({
+      id: crypto.randomUUID(), day, week, type, num, subject, room, teacher,
+      start, end, dateFrom: dateFrom || null, dateTo: dateTo || null,
+      single: false, specificDate: null, archived: false, attendance: {}
+    });
+  }
+
   store.set('schedule', data);
-  ['sNum','sSubject','sRoom','sTeacher','sStart','sEnd','sDateFrom','sDateTo'].forEach(id => {
+  ['sNum','sSubject','sRoom','sTeacher','sStart','sEnd','sDateFrom','sDateTo','sSpecificDate'].forEach(id => {
     document.getElementById(id).value = '';
   });
   renderSchedule(); renderCalendar(); renderArchive();
@@ -1174,17 +1261,29 @@ function openEditModal(id) {
   const l = data.find(x => x.id === id);
   if (!l) return;
   document.getElementById('editId').value = l.id;
-  document.getElementById('eDay').value = l.day;
-  document.getElementById('eWeek').value = l.week;
-  document.getElementById('eType').value = l.type;
   document.getElementById('eNum').value = l.num;
   document.getElementById('eSubject').value = l.subject;
   document.getElementById('eRoom').value = l.room;
   document.getElementById('eTeacher').value = l.teacher;
   document.getElementById('eStart').value = l.start;
   document.getElementById('eEnd').value = l.end;
-  document.getElementById('eDateFrom').value = l.dateFrom || '';
-  document.getElementById('eDateTo').value = l.dateTo || '';
+  document.getElementById('eType').value = l.type;
+
+  if (l.single) {
+    document.getElementById('eRegularFields').style.display = 'none';
+    document.getElementById('eSingleDateRow').style.display = 'block';
+    document.getElementById('ePeriodRow').style.display = 'none';
+    document.getElementById('eSingleDate').value = l.specificDate || '';
+  } else {
+    document.getElementById('eRegularFields').style.display = 'flex';
+    document.getElementById('eSingleDateRow').style.display = 'none';
+    document.getElementById('ePeriodRow').style.display = 'flex';
+    document.getElementById('eDay').value = l.day;
+    document.getElementById('eWeek').value = l.week;
+    document.getElementById('eDateFrom').value = l.dateFrom || '';
+    document.getElementById('eDateTo').value = l.dateTo || '';
+  }
+
   document.getElementById('editModal').classList.add('show');
 }
 
@@ -1194,31 +1293,46 @@ function closeEditModal() {
 
 function saveEditedLesson() {
   const id = document.getElementById('editId').value;
-  const day = document.getElementById('eDay').value;
-  const week = document.getElementById('eWeek').value;
-  const type = document.getElementById('eType').value;
-  const num = document.getElementById('eNum').value.trim();
+  const data = store.get('schedule', sanitizeLesson);
+  const idx = data.findIndex(x => x.id === id);
+  if (idx === -1) return alert('Урок не найден');
+  const orig = data[idx];
+
   const subject = document.getElementById('eSubject').value.trim();
   const room = document.getElementById('eRoom').value.trim();
   const teacher = document.getElementById('eTeacher').value.trim();
   const start = document.getElementById('eStart').value;
   const end = document.getElementById('eEnd').value;
-  const dateFrom = document.getElementById('eDateFrom').value;
-  const dateTo = document.getElementById('eDateTo').value;
+  const type = document.getElementById('eType').value;
+  const num = document.getElementById('eNum').value.trim();
 
   if (!subject) return alert('Введите предмет');
   if (start && end && end <= start) return alert('Конец должен быть позже начала');
-  if (dateFrom && dateTo && dateTo < dateFrom) return alert('Дата «по» должна быть позже «с»');
 
-  const data = store.get('schedule', sanitizeLesson);
-  const idx = data.findIndex(x => x.id === id);
-  if (idx === -1) return alert('Урок не найден');
+  if (orig.single) {
+    const newDate = document.getElementById('eSingleDate').value;
+    if (!newDate) return alert('Укажите дату единичного урока');
+    const d = parseLocalDate(newDate);
+    if (!d) return alert('Некорректная дата');
+    if (d.getDay() === 0) return alert('Воскресенье не может быть днём урока');
+    data[idx] = {
+      ...orig, num, subject, room, teacher, start, end, type,
+      specificDate: newDate,
+      day: DAYS[d.getDay() - 1]
+    };
+  } else {
+    const day = document.getElementById('eDay').value;
+    const week = document.getElementById('eWeek').value;
+    const dateFrom = document.getElementById('eDateFrom').value;
+    const dateTo = document.getElementById('eDateTo').value;
+    if (dateFrom && dateTo && dateTo < dateFrom) return alert('Дата «по» должна быть позже «с»');
+    data[idx] = {
+      ...orig, day, week, num, subject, room, teacher, start, end, type,
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null
+    };
+  }
 
-  data[idx] = {
-    ...data[idx],
-    day, week, type, num, subject, room, teacher,
-    start, end, dateFrom: dateFrom || null, dateTo: dateTo || null
-  };
   store.set('schedule', data);
   closeEditModal();
   renderSchedule(); renderCalendar(); renderArchive();
@@ -1230,12 +1344,37 @@ function delLesson(id) {
   renderSchedule(); renderCalendar(); renderArchive();
 }
 
+function archiveLesson(id) {
+  if (!confirm('Отправить урок в архив? Он исчезнет из расписания, но останется в календаре и архиве.')) return;
+  const data = store.get('schedule', sanitizeLesson);
+  const idx = data.findIndex(x => x.id === id);
+  if (idx === -1) return;
+  const l = data[idx];
+  l.archived = true;
+  if (!l.single && !l.dateTo) {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    l.dateTo = toLocalDateStr(yesterday);
+  }
+  store.set('schedule', data);
+  renderSchedule(); renderCalendar(); renderArchive();
+}
+
 function restoreLesson(id) {
   const data = store.get('schedule', sanitizeLesson);
   const idx = data.findIndex(x => x.id === id);
   if (idx === -1) return;
-  if (!confirm('Убрать дату окончания? Урок снова появится в расписании и продолжит действовать.')) return;
-  data[idx].dateTo = null;
+  const l = data[idx];
+
+  let msg = 'Вернуть урок в расписание?';
+  if (l.single) msg += '\nФлаг архива будет снят.';
+  else if (l.archived && l.dateTo) msg += '\nФлаг архива и дата окончания будут убраны.';
+  else if (l.dateTo) msg += '\nДата окончания будет убрана.';
+  else msg += '\nФлаг архива будет снят.';
+  if (!confirm(msg)) return;
+
+  data[idx].archived = false;
+  if (!l.single) data[idx].dateTo = null;
   store.set('schedule', data);
   renderSchedule(); renderCalendar(); renderArchive();
 }
@@ -1275,13 +1414,16 @@ function typeBadge(l) {
   return '';
 }
 function periodBadge(l) {
+  if (l.single && l.specificDate) {
+    const d = parseLocalDate(l.specificDate);
+    return `<span class="single-badge">📌 Единичный: ${esc(fmtDateShort(d))}</span>`;
+  }
   if (!l.dateFrom && !l.dateTo) return '';
   const from = l.dateFrom ? fmtDateShort(parseLocalDate(l.dateFrom)) : 'начала';
   const to = l.dateTo ? fmtDateShort(parseLocalDate(l.dateTo)) : 'конца';
   return `<span class="period-badge">🗓 ${esc(from)} — ${esc(to)}</span>`;
 }
 
-// Универсальный рендер строки урока
 function renderLessonRow(l, targetDate, opts = {}) {
   const isEnded = !!opts.isEnded;
   const showDateBadge = opts.showDateBadge !== false;
@@ -1296,27 +1438,21 @@ function renderLessonRow(l, targetDate, opts = {}) {
     att || '',
     l.type ? 'type-' + l.type : '',
     isNow ? 'now' : '',
-    isEnded ? 'ended' : ''
+    isEnded ? 'ended' : '',
+    l.single ? 'single-lesson' : ''
   ].filter(Boolean).join(' ');
 
   let statusBadge = '';
-  if (isEnded) {
-    statusBadge = '<span class="status-badge ended">🏁 ЗАВЕРШЁН</span>';
-  } else if (isNow) {
-    statusBadge = '<span class="status-badge now">▶ ИДЁТ СЕЙЧАС</span>';
-  } else if (att === 'cancelled') {
-    statusBadge = '<span class="status-badge cancelled">ОТМЕНЁН</span>';
-  } else if (att === 'attended') {
-    statusBadge = '<span class="status-badge attended">БЫЛ</span>';
-  } else if (att === 'missed') {
-    statusBadge = '<span class="status-badge missed">ПРОПУСК</span>';
-  }
+  if (isEnded) statusBadge = '<span class="status-badge ended">🏁 ЗАВЕРШЁН</span>';
+  else if (isNow) statusBadge = '<span class="status-badge now">▶ ИДЁТ СЕЙЧАС</span>';
+  else if (att === 'cancelled') statusBadge = '<span class="status-badge cancelled">ОТМЕНЁН</span>';
+  else if (att === 'attended') statusBadge = '<span class="status-badge attended">БЫЛ</span>';
+  else if (att === 'missed') statusBadge = '<span class="status-badge missed">ПРОПУСК</span>';
 
   const metaParts = [];
   if (l.room) metaParts.push(`<span>🚪 ${esc(l.room)}</span>`);
   if (l.teacher) metaParts.push(`<span>👤 ${esc(l.teacher)}</span>`);
 
-  // Кнопки
   const disabled = !dateStr || isEnded ? 'disabled' : '';
   const toggleArgs = dateStr ? `'${esc(String(l.id))}', STATUS, '${dateStr}'` : '';
 
@@ -1330,6 +1466,8 @@ function renderLessonRow(l, targetDate, opts = {}) {
       dateBadgeHtml = `<span class="date-badge" style="background:#ffe0e0;color:#c0392b">⛔ вне периода</span>`;
     }
   }
+
+  const showArchiveBtn = !isEnded;
 
   return `<div class="lesson-row ${rowClass}" data-lesson-id="${esc(String(l.id))}">
     <div class="lesson-info">
@@ -1353,6 +1491,7 @@ function renderLessonRow(l, targetDate, opts = {}) {
               onclick="toggleStatus(${toggleArgs.replace('STATUS', "'cancelled'")})" title="Отменён">🚫</button>
       <button class="icon-btn hw-btn" ${disabled}
               onclick="openHWModal('${esc(String(l.id))}')" title="Добавить Д/З">📝</button>
+      ${showArchiveBtn ? `<button class="icon-btn archive-btn" onclick="archiveLesson('${esc(String(l.id))}')" title="В архив">📥</button>` : ''}
       <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
       <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
     </div>
@@ -1372,7 +1511,6 @@ function renderSchedule() {
   const jsDay = today.getDay();
   const todayIdx = jsDay === 0 ? -1 : jsDay - 1;
 
-  // Обновляем счётчик завершённых в тумблере
   const endedCountEl = document.getElementById('endedCount');
   if (endedCountEl) {
     const totalEnded = data.filter(l => isLessonEnded(l)).length;
@@ -1526,11 +1664,10 @@ function renderArchive() {
 
   if (!ended.length) {
     if (summary) summary.style.display = 'none';
-    view.innerHTML = '<div class="empty">Архив пуст. Завершённые занятия появятся здесь, когда истечёт их период действия.</div>';
+    view.innerHTML = '<div class="empty">Архив пуст. Сюда попадают уроки, отправленные вручную (📥) или с истёкшим периодом действия.</div>';
     return;
   }
 
-  // Общая сводка
   let totalOccurrences = 0;
   let totalAttended = 0, totalMissed = 0, totalCancelled = 0;
   ended.forEach(l => {
@@ -1552,32 +1689,44 @@ function renderArchive() {
     `;
   }
 
-  // Сортируем по дате окончания (сначала недавние)
-  ended.sort((a, b) => (b.dateTo || '').localeCompare(a.dateTo || ''));
+  ended.sort((a, b) => {
+    const aKey = a.single ? a.specificDate : a.dateTo;
+    const bKey = b.single ? b.specificDate : b.dateTo;
+    return (bKey || '').localeCompare(aKey || '');
+  });
 
   view.innerHTML = ended.map(l => {
     const stats = getLessonAttendanceStats(l);
     const occurrences = countLessonOccurrences(l);
-    const fromStr = l.dateFrom ? fmtDateShort(parseLocalDate(l.dateFrom)) : '—';
-    const toStr = l.dateTo ? fmtDateShort(parseLocalDate(l.dateTo)) : '—';
-    const weekLabel = l.week === 'both' ? 'каждую неделю'
-      : l.week === 'numerator' ? 'числитель' : 'знаменатель';
+
+    let periodText = '';
+    if (l.single) {
+      const d = parseLocalDate(l.specificDate);
+      periodText = `📌 Единичный урок: ${fmtDateShort(d)} (${esc(l.day)})`;
+    } else {
+      const fromStr = l.dateFrom ? fmtDateShort(parseLocalDate(l.dateFrom)) : '—';
+      const toStr = l.dateTo ? fmtDateShort(parseLocalDate(l.dateTo)) : '—';
+      const weekLabel = l.week === 'both' ? 'каждую неделю'
+        : l.week === 'numerator' ? 'числитель' : 'знаменатель';
+      periodText = `📅 ${fromStr} — ${toStr} • ${esc(l.day)} • ${esc(weekLabel)}`;
+    }
 
     const metaParts = [];
     if (l.teacher) metaParts.push(`👤 ${esc(l.teacher)}`);
     if (l.room) metaParts.push(`🚪 ${esc(l.room)}`);
     if (l.start) metaParts.push(`🕐 ${esc(l.start)}–${esc(l.end || '?')}`);
 
+    const archivedManually = l.archived;
+
     return `<div class="archive-item">
       <div class="archive-main">
         <div class="archive-subject">
           <b>${esc(l.num ? l.num + '. ' : '')}${esc(l.subject)}</b>
           ${typeBadge(l)}
+          ${archivedManually ? '<span class="status-badge ended" style="background:#ffe0e0;color:#c0392b">📥 вручную</span>' : ''}
         </div>
         <div class="archive-meta">${metaParts.join(' • ') || '—'}</div>
-        <div class="archive-period">
-          📅 ${esc(fromStr)} — ${esc(toStr)} • ${esc(l.day)} • ${esc(weekLabel)}
-        </div>
+        <div class="archive-period">${periodText}</div>
         <div class="archive-stats">
           Всего: <b>${occurrences}</b>
           • ✅ Был: <b>${stats.attended}</b>
@@ -1587,7 +1736,7 @@ function renderArchive() {
       </div>
       <div class="archive-actions">
         <button class="icon-btn edit-btn" onclick="openEditModal('${esc(String(l.id))}')" title="Редактировать">✏️</button>
-        <button class="icon-btn restore-btn" onclick="restoreLesson('${esc(String(l.id))}')" title="Восстановить (убрать дату окончания)">♻️</button>
+        <button class="icon-btn restore-btn" onclick="restoreLesson('${esc(String(l.id))}')" title="Восстановить">♻️</button>
         <button class="icon-btn del-btn" onclick="delLesson('${esc(String(l.id))}')" title="Удалить">×</button>
       </div>
     </div>`;
@@ -1707,7 +1856,7 @@ function renderCalDayDetails() {
         : att === 'missed' ? ' • ПРОПУСК' : '';
       return `<div class="cal-day-lesson ${tc}">
         <div>
-          <div class="subject">${esc(l.num ? l.num + '. ' : '')}${esc(l.subject)}</div>
+          <div class="subject">${esc(l.num ? l.num + '. ' : '')}${esc(l.subject)}${l.single ? ' 📌' : ''}</div>
           <div class="meta">${meta.join(' • ')}${st}</div>
         </div>
         <div class="lesson-actions">
@@ -1787,8 +1936,6 @@ function updateDupeWarning(lessonId, subject, dateStr) {
 
 function goToLessonFromDupe(hwId) {
   closeHWModal();
-  const hw = store.get('homework', sanitizeHW).find(h => h.id === hwId);
-  if (!hw) return;
   const btn = Array.from(document.querySelectorAll('.tab')).find(b => b.textContent.includes('Д/З'));
   if (btn) switchTab('homework', btn);
 }
@@ -1817,12 +1964,8 @@ function saveHWFromLesson() {
   }
 
   hwList.push({
-    id: crypto.randomUUID(),
-    subject,
-    task,
-    date: date || '',
-    done: false,
-    lessonId
+    id: crypto.randomUUID(), subject, task, date: date || '',
+    done: false, lessonId
   });
   store.set('homework', hwList);
 
